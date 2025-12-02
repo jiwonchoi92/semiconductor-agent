@@ -70,8 +70,25 @@ INDUSTRY_MAP = {
 }
 
 # =========================================================
-# 2. 강력한 데이터 수집 함수 (네이버 금융 백업)
+# 2. 유틸리티 함수 (데이터 수집 보조)
 # =========================================================
+
+# 최근 영업일 찾기 및 종목 리스트 확보 (핵심 수정)
+@st.cache_data(ttl=3600) # 1시간마다 갱신
+def get_valid_tickers_and_date():
+    # 오늘부터 7일 전까지 역순으로 조회하여 데이터가 있는 날짜 찾기
+    for i in range(7):
+        try:
+            target_date = (datetime.now() - timedelta(days=i)).strftime("%Y%m%d")
+            # KOSPI 종목 리스트 조회 시도
+            kospi = stock.get_market_ticker_list(target_date, market="KOSPI")
+            kosdaq = stock.get_market_ticker_list(target_date, market="KOSDAQ")
+            
+            if kospi and kosdaq: # 데이터가 존재하면
+                return kospi + kosdaq, target_date
+        except:
+            continue
+    return [], None
 
 def get_naver_finance_all(code):
     try:
@@ -175,44 +192,55 @@ with st.sidebar:
     run_btn = st.button("진단 시작 🚀", type="primary", use_container_width=True)
 
 if run_btn and stock_name:
+    # 입력값 공백 제거
+    stock_name = stock_name.strip()
+    
     with st.spinner(f"📡 '{stock_name}' 데이터 수집 중..."):
         
-        # 1. 종목코드 찾기 (IndexError 방지를 위한 날짜 지정)
-        try:
-            # 오늘 날짜로 시도
-            target_date = datetime.now().strftime("%Y%m%d")
-            tickers = stock.get_market_ticker_list(target_date, market="KOSPI") + stock.get_market_ticker_list(target_date, market="KOSDAQ")
-        except Exception:
-            # 실패 시 어제 날짜로 시도 (휴일/서버시간 이슈 대응)
-            target_date = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
-            tickers = stock.get_market_ticker_list(target_date, market="KOSPI") + stock.get_market_ticker_list(target_date, market="KOSDAQ")
+        # 1. 종목코드 찾기 (안전한 방식 적용)
+        tickers, valid_date = get_valid_tickers_and_date()
+        
+        if not tickers:
+            st.error("KRX 서버 접속에 실패했습니다. 잠시 후 다시 시도해주세요.")
+            st.stop()
 
         code = None
         for t in tickers:
+            # KRX에서 종목명 가져오기
             if stock.get_market_ticker_name(t) == stock_name:
                 code = t
                 break
         
         if not code:
-            st.error("❌ 기업을 찾을 수 없습니다. (정확한 종목명을 입력해주세요)")
+            st.error(f"❌ '{stock_name}'을(를) 찾을 수 없습니다. (정확한 종목명을 입력해주세요)")
             st.stop()
 
         try:
             # 2. 데이터 수집
-            end_date = datetime.now().strftime("%Y%m%d")
-            start_date = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
+            # 유효한 날짜(valid_date)를 기준으로 조회
             
             # (A) 주가
-            price_df = stock.get_market_ohlcv_by_date(start_date, end_date, code)
+            price_df = stock.get_market_ohlcv_by_date(valid_date, valid_date, code)
+            if price_df.empty:
+                # 만약 valid_date에도 주가가 없다면(거래정지 등) 최근 30일치 다시 조회
+                start_date = (datetime.strptime(valid_date, "%Y%m%d") - timedelta(days=30)).strftime("%Y%m%d")
+                price_df = stock.get_market_ohlcv_by_date(start_date, valid_date, code)
+            
             if price_df.empty:
                 st.error("주가 데이터를 가져올 수 없습니다.")
                 st.stop()
+                
             current_price = int(price_df.iloc[-1]['종가'])
 
             # (B) 펀더멘탈 (KRX)
             eps, bps, per, pbr = 0, 0, 0.0, 0.0
-            fund_df = stock.get_market_fundamental_by_date(start_date, end_date, code)
+            
+            # 검색 기간을 넉넉하게 잡아서 최신 데이터 확보
+            start_date_fund = (datetime.strptime(valid_date, "%Y%m%d") - timedelta(days=30)).strftime("%Y%m%d")
+            fund_df = stock.get_market_fundamental_by_date(start_date_fund, valid_date, code)
+            
             if not fund_df.empty:
+                # 0이 아닌 값이 있는 가장 최신 행 찾기
                 for i in range(len(fund_df)-1, -1, -1):
                     row = fund_df.iloc[i]
                     if row['PER'] > 0 or row['EPS'] > 0:
