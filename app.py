@@ -4,94 +4,128 @@ from pykrx import stock
 from datetime import datetime, timedelta
 import time
 import requests
-import yfinance as yf
 
 # =========================================================
 # 1. 설정 (산업군, 핵심 지표, 가중치)
 # =========================================================
 CONFIG = {
-    "설계(팹리스/IP)": {"metrics": ["PER"], "ranges": {"PER": [20, 35], "PBR": [2.5, 5.0], "EV_EBITDA": [15, 25]}, "growth": 12.5, "w_dcf": 0.6, "w_multi": 0.4},
-    "파운드리": {"metrics": ["EV_EBITDA"], "ranges": {"PER": [10, 20], "PBR": [1.0, 2.5], "EV_EBITDA": [6, 10]}, "growth": 8.0, "w_dcf": 0.55, "w_multi": 0.45},
-    "메모리/IDM": {"metrics": ["PBR", "EV_EBITDA"], "ranges": {"PER": [8, 15], "PBR": [1.1, 1.8], "EV_EBITDA": [3.5, 6.0]}, "growth": 3.5, "w_dcf": 0.4, "w_multi": 0.6},
-    "장비": {"metrics": ["PER"], "ranges": {"PER": [15, 25], "PBR": [2.0, 4.0], "EV_EBITDA": [10, 18]}, "growth": 9.0, "w_dcf": 0.55, "w_multi": 0.45},
-    "소재/케미칼": {"metrics": ["PER"], "ranges": {"PER": [12, 20], "PBR": [1.5, 3.5], "EV_EBITDA": [8, 15]}, "growth": 6.0, "w_dcf": 0.5, "w_multi": 0.5},
-    "후공정(OSAT)": {"metrics": ["PER", "PBR"], "ranges": {"PER": [10, 18], "PBR": [1.2, 2.2], "EV_EBITDA": [6, 12]}, "growth": 4.5, "w_dcf": 0.4, "w_multi": 0.6},
-    "검사/계측": {"metrics": ["PER"], "ranges": {"PER": [20, 35], "PBR": [3.0, 6.0], "EV_EBITDA": [15, 25]}, "growth": 10.0, "w_dcf": 0.6, "w_multi": 0.4},
-    "모듈/부품": {"metrics": ["PER"], "ranges": {"PER": [8, 14], "PBR": [1.0, 2.0], "EV_EBITDA": [5, 10]}, "growth": 4.0, "w_dcf": 0.45, "w_multi": 0.55},
-    "기타": {"metrics": ["PER"], "ranges": {"PER": [10, 15], "PBR": [1.0, 1.5], "EV_EBITDA": [5, 8]}, "growth": 3.0, "w_dcf": 0.5, "w_multi": 0.5}
+    "설계(팹리스/IP)": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [20, 35], "PBR": [2.5, 5.0], "EV_EBITDA": [15, 25]}, 
+        "growth": 12.5, "w_dcf": 0.6, "w_multi": 0.4
+    },
+    "파운드리": {
+        "metrics": ["EV_EBITDA"], 
+        "ranges": {"PER": [10, 20], "PBR": [1.0, 2.5], "EV_EBITDA": [6, 10]}, 
+        "growth": 8.0, "w_dcf": 0.55, "w_multi": 0.45
+    },
+    "메모리/IDM": {
+        "metrics": ["PBR", "EV_EBITDA"], 
+        "ranges": {"PER": [8, 15], "PBR": [1.1, 1.8], "EV_EBITDA": [3.5, 6.0]}, 
+        "growth": 3.5, "w_dcf": 0.4, "w_multi": 0.6
+    },
+    "장비": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [15, 25], "PBR": [2.0, 4.0], "EV_EBITDA": [10, 18]}, 
+        "growth": 9.0, "w_dcf": 0.55, "w_multi": 0.45
+    },
+    "소재/케미칼": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [12, 20], "PBR": [1.5, 3.5], "EV_EBITDA": [8, 15]}, 
+        "growth": 6.0, "w_dcf": 0.5, "w_multi": 0.5
+    },
+    "후공정(OSAT)": {
+        "metrics": ["PER", "PBR"], 
+        "ranges": {"PER": [10, 18], "PBR": [1.2, 2.2], "EV_EBITDA": [6, 12]}, 
+        "growth": 4.5, "w_dcf": 0.4, "w_multi": 0.6
+    },
+    "검사/계측": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [20, 35], "PBR": [3.0, 6.0], "EV_EBITDA": [15, 25]}, 
+        "growth": 10.0, "w_dcf": 0.6, "w_multi": 0.4
+    },
+    "모듈/부품": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [8, 14], "PBR": [1.0, 2.0], "EV_EBITDA": [5, 10]}, 
+        "growth": 4.0, "w_dcf": 0.45, "w_multi": 0.55
+    },
+    "기타": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [10, 15], "PBR": [1.0, 1.5], "EV_EBITDA": [5, 8]}, 
+        "growth": 3.0, "w_dcf": 0.5, "w_multi": 0.5
+    }
 }
 
 INDUSTRY_MAP = {
-    "LX세미콘": "설계(팹리스/IP)", "텔레칩스": "설계(팹리스/IP)", "칩스앤미디어": "설계(팹리스/IP)", "어보브반도체": "설계(팹리스/IP)", "제주반도체": "설계(팹리스/IP)",
-    "삼성전자": "메모리/IDM", "SK하이닉스": "메모리/IDM", "DB하이텍": "파운드리", 
-    "한미반도체": "장비", "주성엔지니어링": "장비", "HPSP": "장비", "이오테크닉스": "장비", "원익IPS": "장비", "피에스케이": "장비",
+    "LX세미콘": "설계(팹리스/IP)", "텔레칩스": "설계(팹리스/IP)", "칩스앤미디어": "설계(팹리스/IP)", 
+    "어보브반도체": "설계(팹리스/IP)", "제주반도체": "설계(팹리스/IP)", "가온칩스": "설계(팹리스/IP)",
+    "삼성전자": "메모리/IDM", "SK하이닉스": "메모리/IDM",
+    "DB하이텍": "파운드리", 
+    "한미반도체": "장비", "주성엔지니어링": "장비", "HPSP": "장비", "이오테크닉스": "장비", 
+    "원익IPS": "장비", "피에스케이": "장비", "테스": "장비", "유진테크": "장비",
     "솔브레인": "소재/케미칼", "동진쎄미켐": "소재/케미칼", "한솔케미칼": "소재/케미칼", "SKC": "소재/케미칼",
     "하나마이크론": "후공정(OSAT)", "SFA반도체": "후공정(OSAT)", "두산테스나": "후공정(OSAT)", "네패스": "후공정(OSAT)",
     "리노공업": "검사/계측", "파크시스템스": "검사/계측", "고영": "검사/계측", "티에스이": "검사/계측", "디아이": "검사/계측",
     "ISC": "모듈/부품", "월덱스": "모듈/부품", "티씨케이": "모듈/부품", "삼성전기": "모듈/부품", "LG이노텍": "모듈/부품", "심텍": "모듈/부품"
 }
 
+# 서버 차단 대비용 비상 코드 맵
 FALLBACK_CODES = {
-    "삼성전자": "005930", "SK하이닉스": "000660", "DB하이텍": "000990", "LX세미콘": "108320", "한미반도체": "042700",
-    "HPSP": "403870", "리노공업": "058470", "솔브레인": "357780", "동진쎄미켐": "005290", "하나마이크론": "067310",
-    "SFA반도체": "036540", "LG이노텍": "011070", "삼성전기": "009150", "원익IPS": "240810", "이오테크닉스": "039030"
+    "삼성전자": "005930", "SK하이닉스": "000660", "DB하이텍": "000990", "LX세미콘": "108320",
+    "한미반도체": "042700", "HPSP": "403870", "리노공업": "058470", "솔브레인": "357780", 
+    "동진쎄미켐": "005290", "하나마이크론": "067310", "SFA반도체": "036540", "LG이노텍": "011070",
+    "삼성전기": "009150", "원익IPS": "240810", "이오테크닉스": "039030", "피에스케이": "319660",
+    "고영": "098460", "티에스이": "131290", "어보브반도체": "102120", "텔레칩스": "054450"
 }
 
 # =========================================================
-# 2. 데이터 수집 함수 (Yahoo Finance 메인 + Naver/KRX 백업)
+# 2. 데이터 수집 함수 (KRX -> Naver 순차 시도)
 # =========================================================
 
 def get_kst_now():
     return datetime.utcnow() + timedelta(hours=9)
 
-def get_yahoo_data(code):
-    """야후 파이낸스에서 데이터 가져오기 (서버 환경에서 가장 강력함)"""
-    try:
-        # 코스피(.KS) 우선 시도, 실패 시 코스닥(.KQ)
-        for suffix in [".KS", ".KQ"]:
-            ticker = yf.Ticker(f"{code}{suffix}")
-            try:
-                info = ticker.info
-                # 가격 정보가 없으면 다음 suffix 시도
-                if not info or 'currentPrice' not in info:
-                    continue
-                
-                return {
-                    'price': info.get('currentPrice'),
-                    'EPS': info.get('trailingEps'),  # 없으면 None
-                    'BPS': info.get('bookValue'),
-                    'PER': info.get('trailingPE'),
-                    'PBR': info.get('priceToBook'),
-                    'EV_EBITDA': info.get('enterpriseToEbitda')
-                }
-            except: continue
-        return None
-    except:
-        return None
-
 def get_naver_finance_all(code):
-    """네이버 금융 크롤링 (보조)"""
+    """
+    네이버 금융 크롤링 (해외 서버 차단 우회 시도)
+    """
     try:
         url = f"https://finance.naver.com/item/main.naver?code={code}"
-        # 헤더를 넣어 사람인 척 속임
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
-        response = requests.get(url, headers=headers)
+        # 일반 브라우저처럼 보이게 헤더 추가
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Referer': 'https://finance.naver.com/',
+            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
+        }
+        response = requests.get(url, headers=headers, timeout=5)
+        
+        # 인코딩 설정 (한글 깨짐 방지)
+        response.encoding = 'euc-kr' 
+        
         dfs = pd.read_html(response.text)
         
         data = {"PER": 0.0, "EPS": 0, "PBR": 0.0, "BPS": 0, "EV_EBITDA": 0.0}
         
         for df in dfs:
             try:
-                if len(df.index) > 0: df = df.set_index(df.columns[0])
+                # 인덱스 설정 시도 (에러 방지)
+                if len(df) > 0 and len(df.columns) > 1:
+                    # 첫 번째 컬럼을 인덱스로 (보통 항목명)
+                    df = df.set_index(df.columns[0])
             except: continue
             
             def find_val(key_list):
                 for idx in df.index:
                     if any(k in str(idx) for k in key_list):
-                        vals = pd.to_numeric(df.loc[idx], errors='coerce').dropna()
-                        if not vals.empty: return float(vals.iloc[-1])
+                        # 해당 행의 값들을 숫자로 변환
+                        vals = pd.to_numeric(df.loc[idx], errors='coerce')
+                        # 유효한 값(NaN 아님) 중 가장 오른쪽(최신) 값을 가져옴
+                        valid_vals = vals.dropna()
+                        if not valid_vals.empty:
+                            return float(valid_vals.iloc[-1])
                 return 0
 
+            # 하나씩 찾기 (이미 찾은건 건너뜀)
             if data['PER'] == 0: data['PER'] = find_val(['PER', '배'])
             if data['EPS'] == 0: data['EPS'] = int(find_val(['EPS', '원']))
             if data['PBR'] == 0: data['PBR'] = find_val(['PBR', '배'])
@@ -99,7 +133,9 @@ def get_naver_finance_all(code):
             if data['EV_EBITDA'] == 0: data['EV_EBITDA'] = find_val(['EV/EBITDA'])
             
         return data
-    except: return None
+    except Exception as e:
+        # print(f"네이버 크롤링 실패: {e}")
+        return None
 
 # =========================================================
 # 3. 계산 함수
@@ -136,11 +172,11 @@ def calculate_multiple(eps, bps, ebitda_ps, config):
         values.append(ebitda_ps * target)
         used_metrics_str.append(f"EV/EBITDA(×{target})")
         
-    if not values: return 0, "데이터 부족"
+    if not values: return 0, "데이터 부족 (EPS/BPS/EBITDA 누락)"
     return int(sum(values) / len(values)), ", ".join(used_metrics_str)
 
 # =========================================================
-# 4. UI
+# 4. Streamlit UI
 # =========================================================
 st.set_page_config(page_title="반도체 가치 진단", page_icon="💎", layout="wide")
 st.title("💎 반도체 실시간 가치 진단 에이전트")
@@ -155,7 +191,7 @@ if run_btn and stock_name:
     stock_name = stock_name.strip()
     with st.spinner(f"📡 '{stock_name}' 데이터 수집 중..."):
         
-        # 1. 코드 찾기 (Fallback Map 우선)
+        # 1. 코드 찾기 (Fallback Map 우선 -> 실패시 KRX 조회)
         code = FALLBACK_CODES.get(stock_name)
         if not code:
             try:
@@ -167,67 +203,66 @@ if run_btn and stock_name:
             except: pass
         
         if not code:
-            st.error("❌ 기업 코드를 찾을 수 없습니다. (Fallback 목록에도 없음)")
+            st.error(f"❌ '{stock_name}'을(를) 찾을 수 없습니다.")
             st.stop()
 
         try:
-            # 2. 데이터 수집 시작 (전략: Yahoo -> KRX -> Naver 순서로 빈칸 채우기)
+            # 2. 데이터 수집 (KRX -> 실패시 Naver)
             current_price = 0
             eps, bps, per, pbr, ev_ebitda = 0, 0, 0.0, 0.0, 0.0
             data_source = ""
 
-            # (A) Yahoo Finance (서버 환경 1순위)
-            y_data = get_yahoo_data(code)
-            if y_data:
-                current_price = int(y_data['price']) if y_data['price'] else 0
-                eps = int(y_data['EPS']) if y_data['EPS'] else 0
-                bps = int(y_data['BPS']) if y_data['BPS'] else 0
-                per = float(y_data['PER']) if y_data['PER'] else 0.0
-                pbr = float(y_data['PBR']) if y_data['PBR'] else 0.0
-                if y_data['EV_EBITDA']: ev_ebitda = float(y_data['EV_EBITDA'])
-                data_source = "Yahoo Finance (Global)"
+            # (A) KRX 주가/재무 수집 시도
+            try:
+                end_date = get_kst_now().strftime("%Y%m%d")
+                start_date = (get_kst_now() - timedelta(days=30)).strftime("%Y%m%d")
+                
+                price_df = stock.get_market_ohlcv_by_date(start_date, end_date, code)
+                if not price_df.empty: 
+                    current_price = int(price_df.iloc[-1]['종가'])
+                
+                fund_df = stock.get_market_fundamental_by_date(start_date, end_date, code)
+                if not fund_df.empty:
+                    # 유효한(0이 아닌) 가장 최신 데이터 찾기
+                    for i in range(len(fund_df)-1, -1, -1):
+                        row = fund_df.iloc[i]
+                        if row['PER'] > 0 or row['EPS'] > 0:
+                            eps = int(row.get('EPS', 0))
+                            bps = int(row.get('BPS', 0))
+                            per = float(row.get('PER', 0))
+                            pbr = float(row.get('PBR', 0))
+                            data_source = "KRX (한국거래소)"
+                            break
+            except: 
+                pass
 
-            # (B) KRX (로컬/한국환경 보완)
-            # Yahoo에서 데이터를 못 가져왔거나(0), 가격이 비정상적일 때 시도
-            if current_price == 0 or eps == 0:
-                try:
-                    end_date = get_kst_now().strftime("%Y%m%d")
-                    start_date = (get_kst_now() - timedelta(days=30)).strftime("%Y%m%d")
-                    
-                    if current_price == 0:
-                        price_df = stock.get_market_ohlcv_by_date(start_date, end_date, code)
-                        if not price_df.empty: current_price = int(price_df.iloc[-1]['종가'])
-                    
-                    if eps == 0:
-                        fund_df = stock.get_market_fundamental_by_date(start_date, end_date, code)
-                        if not fund_df.empty:
-                            latest = fund_df.iloc[-1]
-                            if latest['EPS'] > 0:
-                                eps = int(latest['EPS'])
-                                bps = int(latest['BPS'])
-                                per = float(latest['PER'])
-                                pbr = float(latest['PBR'])
-                                data_source += " + KRX"
-                except: pass
-
-            # (C) Naver Finance (마지막 보루 & EV/EBITDA 보완)
-            if ev_ebitda == 0 or eps == 0:
+            # (B) Naver Finance 백업 (KRX 데이터가 없거나 0일 때 + EV/EBITDA)
+            # 서버 환경에서 KRX가 막혔거나 데이터가 비었으면 네이버를 씁니다.
+            if current_price == 0 or eps == 0 or ev_ebitda == 0:
                 n_data = get_naver_finance_all(code)
                 if n_data:
-                    if ev_ebitda == 0: ev_ebitda = n_data.get('EV_EBITDA', 0)
-                    if eps == 0:
-                        eps = n_data.get('EPS', 0)
-                        bps = n_data.get('BPS', 0)
-                        per = n_data.get('PER', 0.0)
-                        pbr = n_data.get('PBR', 0.0)
-                        data_source += " + Naver"
+                    # KRX에서 못 가져온 데이터만 네이버 것으로 채움 (우선순위: KRX > Naver)
+                    if eps == 0: 
+                        eps = int(n_data.get('EPS', 0))
+                        data_source = "Naver Finance (Backup)"
+                    if bps == 0: bps = int(n_data.get('BPS', 0))
+                    if per == 0: per = float(n_data.get('PER', 0.0))
+                    if pbr == 0: pbr = float(n_data.get('PBR', 0.0))
+                    
+                    # EV/EBITDA는 KRX에 없으므로 네이버거 무조건 사용
+                    ev_ebitda = n_data.get('EV_EBITDA', 0.0)
 
-            # (D) 최종 보정
+            # (C) 최종 데이터 검증 및 보정
+            # 그래도 EV/EBITDA가 없으면 PER 기반 추정 (최후의 보루)
             if ev_ebitda <= 0 and per > 0: ev_ebitda = round(per * 0.7, 2)
-            ebitda_ps = int(current_price / ev_ebitda) if ev_ebitda > 0 else 0
+            
+            # EBITDA 역산 (Valuation 용)
+            ebitda_ps = 0
+            if current_price > 0 and ev_ebitda > 0:
+                ebitda_ps = int(current_price / ev_ebitda)
             
             if eps == 0:
-                st.error("재무 데이터를 가져오지 못했습니다. (서버 차단 또는 데이터 없음)")
+                st.error("재무 데이터(EPS)를 가져오지 못했습니다. (서버 차단 가능성)")
                 st.stop()
 
             # 3. 계산
@@ -271,7 +306,7 @@ if run_btn and stock_name:
             st.table(pd.DataFrame(metrics_data))
             
             with st.expander("🔍 원본 데이터"):
-                st.write(f"EPS: {eps:,} | BPS: {bps:,} | 주당 EBITDA: {ebitda_ps:,}")
+                st.write(f"EPS: {eps:,}원 | BPS: {bps:,}원 | 주당 EBITDA: {ebitda_ps:,}원")
                 st.write(f"성장률: {config['growth']}%")
 
         except Exception as e:
