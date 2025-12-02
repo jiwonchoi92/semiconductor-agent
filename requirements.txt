@@ -4,3 +4,4 @@ pykrx
 requests
 lxml
 html5lib
+setuptools
