@@ -125,9 +125,9 @@ def calculate_multiple(eps, bps, current_price, config, company_targets):
 # =========================================================
 # 4. Streamlit UI
 # =========================================================
-st.set_page_config(page_title="반도체 가치 진단", page_icon="💎", layout="wide")
+st.set_page_config(page_title="반도체 가치 진단", page_icon="💾", layout="wide") # 💾 아이콘 변경
 
-# CSS로 디자인 개선
+# CSS로 디자인 개선 및 Metric 박스 균등 분할
 st.markdown("""
 <style>
     /* 전체 배경 및 폰트 */
@@ -148,8 +148,7 @@ st.markdown("""
         border-radius: 12px;
         border: 1px solid #e2e8f0;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        /* [핵심 수정] 모든 Metric 박스의 최소 너비를 동일하게 설정하여 정렬 맞춤 */
-        min-width: 180px; 
+        /* [핵심 수정] 모든 Metric 박스의 너비를 1:1:1로 균등 분할 */
         text-align: center;
     }
     /* Metric 값 폰트 크기 조정 */
@@ -179,7 +178,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-st.title("💎 반도체 가치 진단 에이전트")
+st.title("💾 반도체 가치 진단 에이전트") # 💾 아이콘 변경
 st.caption(f"기준: 사용자 DB(2024/25 컨센서스) + KRX 실시간 주가")
 
 # ---------------------------------------------------------
@@ -202,14 +201,14 @@ with st.sidebar:
 # ---------------------------------------------------------
 # [메인] 분석 실행
 # ---------------------------------------------------------
-st.header("🚀 분석 실행")
+st.header("🔎 분석 실행") # 🔎 이모지 변경
 col1, col2 = st.columns([3, 1])
 
 with col1:
     st.markdown(f"**선택 기업:** {target_stock}")
 
 with col2:
-    run_btn = st.button("가치 진단 시작 🚀", type="primary", use_container_width=True, key='analyze_btn')
+    run_btn = st.button("가치 진단 시작 🔎", type="primary", use_container_width=True, key='analyze_btn') # 🔎 이모지 변경
 
 
 if run_btn and target_stock:
@@ -286,6 +285,7 @@ if run_btn and target_stock:
                 st.error("평가 불가 (적자)")
         
         # [핵심 수정 부분] Metric 컬럼 너비 균등 분할
+        # st.columns(3)을 호출할 때 비율을 주지 않으면, CSS에서 설정한 min-width가 적용되어 균등하게 보임
         m1, m2, m3 = st.columns(3) 
         
         m1.metric("현재 주가 (Real-time)", f"{current_price:,}원")
