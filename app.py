@@ -56,90 +56,121 @@ CONFIG = {
     }
 }
 
-# 기업별 산업군 매핑
 INDUSTRY_MAP = {
-    "LX세미콘": "설계(팹리스/IP)", "어보브반도체": "설계(팹리스/IP)", "텔레칩스": "설계(팹리스/IP)", "제주반도체": "설계(팹리스/IP)", "가온칩스": "설계(팹리스/IP)",
+    "LX세미콘": "설계(팹리스/IP)", "텔레칩스": "설계(팹리스/IP)", "칩스앤미디어": "설계(팹리스/IP)", 
+    "어보브반도체": "설계(팹리스/IP)", "제주반도체": "설계(팹리스/IP)", "가온칩스": "설계(팹리스/IP)",
     "삼성전자": "메모리/IDM", "SK하이닉스": "메모리/IDM",
-    "DB하이텍": "파운드리",
-    "한미반도체": "장비", "피에스케이": "장비", "주성엔지니어링": "장비", "HPSP": "장비", "이오테크닉스": "장비", "원익IPS": "장비",
-    "동진쎄미켐": "소재/케미칼", "솔브레인": "소재/케미칼", "한솔케미칼": "소재/케미칼", "SKC": "소재/케미칼",
+    "DB하이텍": "파운드리", 
+    "한미반도체": "장비", "주성엔지니어링": "장비", "HPSP": "장비", "이오테크닉스": "장비", 
+    "원익IPS": "장비", "피에스케이": "장비", "테스": "장비", "유진테크": "장비",
+    "솔브레인": "소재/케미칼", "동진쎄미켐": "소재/케미칼", "한솔케미칼": "소재/케미칼", "SKC": "소재/케미칼",
     "하나마이크론": "후공정(OSAT)", "SFA반도체": "후공정(OSAT)", "두산테스나": "후공정(OSAT)", "네패스": "후공정(OSAT)",
-    "디아이": "검사/계측", "리노공업": "검사/계측", "고영": "검사/계측", "파크시스템스": "검사/계측", "티에스이": "검사/계측",
-    "삼성전기": "모듈/부품", "LG이노텍": "모듈/부품", "심텍": "모듈/부품", "ISC": "모듈/부품", "월덱스": "모듈/부품", "티씨케이": "모듈/부품"
+    "리노공업": "검사/계측", "파크시스템스": "검사/계측", "고영": "검사/계측", "티에스이": "검사/계측", "디아이": "검사/계측",
+    "ISC": "모듈/부품", "월덱스": "모듈/부품", "티씨케이": "모듈/부품", "삼성전기": "모듈/부품", "LG이노텍": "모듈/부품", "심텍": "모듈/부품"
 }
 
-# [서버 비상용] KRX 리스트 조회 실패 시 사용할 종목 코드 (선생님 엑셀 파일 전체 반영)
+# [비상용 종목 코드 매핑] - KRX 리스트 조회 실패 시 사용
 FALLBACK_CODES = {
-    "LX세미콘": "108320", "어보브반도체": "102120", "텔레칩스": "054450", "제주반도체": "080220", "가온칩스": "393360",
-    "삼성전자": "005930", "SK하이닉스": "000660",
-    "DB하이텍": "000990",
-    "한미반도체": "042700", "피에스케이": "319660", "주성엔지니어링": "036930", "HPSP": "403870", "이오테크닉스": "039030", "원익IPS": "240810",
-    "동진쎄미켐": "005290", "솔브레인": "357780", "한솔케미칼": "014680", "SKC": "011790",
-    "하나마이크론": "067310", "SFA반도체": "036540", "두산테스나": "131970", "네패스": "033640",
-    "디아이": "003160", "리노공업": "058470", "고영": "098460", "파크시스템스": "140860", "티에스이": "131290",
-    "삼성전기": "009150", "LG이노텍": "011070", "심텍": "222800", "ISC": "095340", "월덱스": "101160", "티씨케이": "064760"
+    "삼성전자": "005930", "SK하이닉스": "000660", "DB하이텍": "000990", "LX세미콘": "108320",
+    "한미반도체": "042700", "HPSP": "403870", "리노공업": "058470", "솔브레인": "357780", 
+    "동진쎄미켐": "005290", "하나마이크론": "067310", "SFA반도체": "036540", "LG이노텍": "011070",
+    "삼성전기": "009150", "원익IPS": "240810", "이오테크닉스": "039030", "피에스케이": "319660",
+    "고영": "098460", "티에스이": "131290", "어보브반도체": "102120", "텔레칩스": "054450"
 }
 
 # =========================================================
-# 2. 데이터 수집 함수 (리얼 크롤링)
+# 2. 강력한 크롤링 함수 (네이버 -> FnGuide 순차 시도)
 # =========================================================
 
-# 한국 시간(KST) 구하기
 def get_kst_now():
     return datetime.utcnow() + timedelta(hours=9)
 
-# 네이버 금융에서 '컨센서스(추정치)' 크롤링
-def get_naver_finance_real(code):
+def crawl_fnguide(code):
+    """FnGuide(데이터 원천)에서 직접 크롤링 - 서버 차단 우회용"""
     try:
-        url = f"https://finance.naver.com/item/main.naver?code={code}"
-        # 브라우저 위장 헤더
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'ko-KR,ko;q=0.9', # 한국어 요청
-        }
-        
+        # FnGuide 재무제표 페이지 (Annual)
+        url = f"https://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A{code}&cID=&MenuYn=Y&ReportGB=&NewMenuID=101&stkGb=701"
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=5)
-        response.encoding = 'euc-kr' # 한글 깨짐 방지
-        
         dfs = pd.read_html(response.text)
         
-        data = {"PER": 0.0, "EPS": 0, "PBR": 0.0, "BPS": 0, "EV_EBITDA": 0.0}
+        # 'Financial Highlight' 테이블 (보통 첫번째)
+        df = dfs[11] if len(dfs) > 11 else dfs[0] # Highlight 테이블 찾기
         
+        # 인덱스 설정 (항목명)
+        df = df.set_index(df.columns[0])
+        
+        data = {}
+        
+        def get_val(keys):
+            for idx in df.index:
+                if any(k in str(idx) for k in keys):
+                    row = df.loc[idx]
+                    # 가장 오른쪽(최신/컨센서스) 값 가져오기
+                    vals = pd.to_numeric(row, errors='coerce').dropna()
+                    if not vals.empty: return float(vals.iloc[-1])
+            return 0
+
+        data['EPS'] = int(get_val(['EPS', '지배주주순이익']))
+        data['BPS'] = int(get_val(['BPS']))
+        data['PER'] = get_val(['PER'])
+        data['PBR'] = get_val(['PBR'])
+        data['EV_EBITDA'] = get_val(['EV/EBITDA'])
+        
+        return data if data['EPS'] > 0 else None
+    except:
+        return None
+
+def crawl_naver(code):
+    """네이버 금융 크롤링"""
+    try:
+        url = f"https://finance.naver.com/item/main.naver?code={code}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'ko-KR,ko;q=0.9',
+        }
+        response = requests.get(url, headers=headers, timeout=5)
+        response.encoding = 'euc-kr'
+        dfs = pd.read_html(response.text)
+        
+        data = {}
         target_df = None
-        # '최근 연간 실적' 테이블 찾기
         for df in dfs:
             if '최근 연간 실적' in str(df.columns) or '주요재무제표' in str(df.columns):
                 target_df = df
                 break
         
         if target_df is None: return None
+        target_df = target_df.set_index(target_df.columns[0])
 
-        # 인덱스 정리
-        if not isinstance(target_df.index, pd.Index) or len(target_df.index) == 0:
-            target_df = target_df.set_index(target_df.columns[0])
-
-        # 값 추출 (가장 오른쪽 값 = 미래 추정치)
-        def extract_val(keywords):
+        def get_val(keys):
             for idx in target_df.index:
-                if any(k in str(idx) for k in keywords):
-                    row = target_df.loc[idx]
-                    # 숫자로 변환
-                    vals = pd.to_numeric(row, errors='coerce')
-                    valid_vals = vals.dropna()
-                    if not valid_vals.empty:
-                        # 2025년(미래) 추정치가 있으면 그걸 가져옴
-                        return float(valid_vals.iloc[-1])
+                if any(k in str(idx) for k in keys):
+                    vals = pd.to_numeric(target_df.loc[idx], errors='coerce').dropna()
+                    if not vals.empty: return float(vals.iloc[-1]) # 맨 오른쪽(컨센서스)
             return 0
 
-        data["PER"] = extract_val(['PER', '배'])
-        data["EPS"] = int(extract_val(['EPS', '원']))
-        data["PBR"] = extract_val(['PBR', '배'])
-        data["BPS"] = int(extract_val(['BPS', '원']))
-        data["EV_EBITDA"] = extract_val(['EV/EBITDA'])
+        data['EPS'] = int(get_val(['EPS']))
+        data['BPS'] = int(get_val(['BPS']))
+        data['PER'] = get_val(['PER'])
+        data['PBR'] = get_val(['PBR'])
+        data['EV_EBITDA'] = get_val(['EV/EBITDA'])
         
-        return data
-    except Exception as e:
+        return data if data['EPS'] > 0 else None
+    except:
         return None
+
+def get_financial_data(code):
+    """크롤링 통합 함수 (네이버 -> FnGuide 순서)"""
+    # 1. 네이버 시도
+    data = crawl_naver(code)
+    if data and data['EPS'] > 0: return data, "Naver (Live)"
+    
+    # 2. FnGuide 시도 (네이버 실패 시)
+    data = crawl_fnguide(code)
+    if data and data['EPS'] > 0: return data, "FnGuide (Live)"
+    
+    return None, None
 
 # =========================================================
 # 3. 계산 함수
@@ -176,7 +207,7 @@ def calculate_multiple(eps, bps, ebitda_ps, config):
         values.append(ebitda_ps * target)
         used_metrics_str.append(f"EV/EBITDA(×{target})")
         
-    if not values: return 0, "데이터 부족"
+    if not values: return 0, "지표 부족"
     return int(sum(values) / len(values)), ", ".join(used_metrics_str)
 
 # =========================================================
@@ -184,7 +215,7 @@ def calculate_multiple(eps, bps, ebitda_ps, config):
 # =========================================================
 st.set_page_config(page_title="반도체 가치 진단", page_icon="💎", layout="wide")
 st.title("💎 반도체 실시간 가치 진단 에이전트")
-st.caption(f"Server Time (KST): {get_kst_now().strftime('%Y-%m-%d %H:%M')}")
+st.caption(f"Server Time: {get_kst_now().strftime('%Y-%m-%d %H:%M')}")
 
 with st.sidebar:
     st.header("🔍 기업 검색")
@@ -193,16 +224,13 @@ with st.sidebar:
 
 if run_btn and stock_name:
     stock_name = stock_name.strip()
-    with st.spinner(f"📡 '{stock_name}' 데이터 크롤링 중..."):
+    with st.spinner(f"📡 '{stock_name}' 실시간 데이터 수집 중..."):
         
-        # 1. 코드 찾기 (Fallback Map 우선 -> 실패시 KRX 조회)
+        # 1. 종목코드 찾기
         code = FALLBACK_CODES.get(stock_name)
-        
         if not code:
-            # KRX 리스트에서 찾기 시도
             try:
-                today_str = get_kst_now().strftime("%Y%m%d")
-                tickers = stock.get_market_ticker_list(today_str, market="KOSPI") + stock.get_market_ticker_list(today_str, market="KOSDAQ")
+                tickers = stock.get_market_ticker_list(market="KOSPI") + stock.get_market_ticker_list(market="KOSDAQ")
                 for t in tickers:
                     if stock.get_market_ticker_name(t) == stock_name:
                         code = t
@@ -210,42 +238,37 @@ if run_btn and stock_name:
             except: pass
         
         if not code:
-            st.error("❌ 기업 코드를 찾을 수 없습니다. (상장폐지 또는 종목명 확인 필요)")
+            st.error("❌ 기업 코드를 찾을 수 없습니다.")
             st.stop()
 
         try:
-            # 2. 데이터 수집 (KRX 주가 + 네이버 재무)
-            current_price = 0
+            # 2. 데이터 수집
             
             # (A) 주가 (KRX)
+            current_price = 0
             try:
                 end_date = get_kst_now().strftime("%Y%m%d")
-                start_date = (get_kst_now() - timedelta(days=10)).strftime("%Y%m%d")
+                start_date = (get_kst_now() - timedelta(days=7)).strftime("%Y%m%d")
                 price_df = stock.get_market_ohlcv_by_date(start_date, end_date, code)
-                if not price_df.empty: 
-                    current_price = int(price_df.iloc[-1]['종가'])
+                if not price_df.empty: current_price = int(price_df.iloc[-1]['종가'])
             except: pass
-
+            
             if current_price == 0:
                 st.error("주가 데이터를 가져오지 못했습니다. (KRX 접속 실패)")
                 st.stop()
 
-            # (B) 재무 데이터 (네이버 금융 크롤링 - 컨센서스)
-            n_data = get_naver_finance_real(code)
+            # (B) 재무 데이터 (크롤링)
+            fin_data, source = get_financial_data(code)
             
-            if not n_data or n_data['EPS'] == 0:
-                st.error("재무 데이터를 크롤링하지 못했습니다. (네이버 금융 접속 차단)")
+            if not fin_data:
+                st.error(f"재무 데이터를 가져오지 못했습니다. (Naver/FnGuide 차단됨)")
                 st.stop()
 
-            eps = n_data['EPS']
-            bps = n_data['BPS']
-            per = n_data['PER']
-            pbr = n_data['PBR']
-            ev_ebitda = n_data['EV_EBITDA']
+            eps, bps, per, pbr, ev_ebitda = fin_data['EPS'], fin_data['BPS'], fin_data['PER'], fin_data['PBR'], fin_data['EV_EBITDA']
 
-            # (C) 데이터 보정
+            # (C) 보정
             if ev_ebitda <= 0 and per > 0: ev_ebitda = round(per * 0.7, 2)
-            ebitda_ps = int(current_price / ev_ebitda) if ev_ebitda > 0 else 0
+            ebitda_ps = int(current_price / ev_ebitda) if ev_ebitda > 0 and current_price > 0 else 0
             
             # 3. 가치 평가
             industry = INDUSTRY_MAP.get(stock_name, "기타")
@@ -264,7 +287,7 @@ if run_btn and stock_name:
             c1, c2 = st.columns([2, 1])
             with c1:
                 st.subheader(f"{stock_name} ({code})")
-                st.caption(f"산업군: {industry} | 데이터: 네이버 금융 실시간 크롤링")
+                st.caption(f"산업군: {industry} | 출처: {source}")
             with c2:
                 if upside > 15: st.success(f"✅ 저평가 (+{upside:.1f}%)")
                 elif upside < -15: st.error(f"⚠️ 고평가 ({upside:.1f}%)")
@@ -288,9 +311,7 @@ if run_btn and stock_name:
             st.table(pd.DataFrame(metrics_data))
             
             with st.expander("🔍 데이터 원본 보기"):
-                st.write(f"- EPS: {eps:,}원")
-                st.write(f"- BPS: {bps:,}원")
-                st.write(f"- 주당 EBITDA: {ebitda_ps:,}원")
+                st.write(f"- EPS: {eps:,}원 | BPS: {bps:,}원 | 주당 EBITDA: {ebitda_ps:,}원")
                 st.write(f"- 성장률: {config['growth']}%")
 
         except Exception as e:
