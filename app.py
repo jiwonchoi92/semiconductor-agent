@@ -3,37 +3,73 @@ import pandas as pd
 from pykrx import stock
 from datetime import datetime, timedelta
 import time
+import requests
 
 # =========================================================
 # 1. 설정 (산업군, 핵심 지표, 가중치)
 # =========================================================
 CONFIG = {
-    "설계(팹리스/IP)": {"metrics": ["PER"], "ranges": {"PER": [20, 35], "PBR": [2.5, 5.0], "EV_EBITDA": [15, 25]}, "growth": 12.5, "w_dcf": 0.6, "w_multi": 0.4},
-    "파운드리": {"metrics": ["EV_EBITDA"], "ranges": {"PER": [10, 20], "PBR": [1.0, 2.5], "EV_EBITDA": [6, 10]}, "growth": 8.0, "w_dcf": 0.55, "w_multi": 0.45},
-    "메모리/IDM": {"metrics": ["PBR", "EV_EBITDA"], "ranges": {"PER": [8, 15], "PBR": [1.1, 1.8], "EV_EBITDA": [3.5, 6.0]}, "growth": 3.5, "w_dcf": 0.4, "w_multi": 0.6},
-    "장비": {"metrics": ["PER"], "ranges": {"PER": [15, 25], "PBR": [2.0, 4.0], "EV_EBITDA": [10, 18]}, "growth": 9.0, "w_dcf": 0.55, "w_multi": 0.45},
-    "소재/케미칼": {"metrics": ["PER"], "ranges": {"PER": [12, 20], "PBR": [1.5, 3.5], "EV_EBITDA": [8, 15]}, "growth": 6.0, "w_dcf": 0.5, "w_multi": 0.5},
-    "후공정(OSAT)": {"metrics": ["PER", "PBR"], "ranges": {"PER": [10, 18], "PBR": [1.2, 2.2], "EV_EBITDA": [6, 12]}, "growth": 4.5, "w_dcf": 0.4, "w_multi": 0.6},
-    "검사/계측": {"metrics": ["PER"], "ranges": {"PER": [20, 35], "PBR": [3.0, 6.0], "EV_EBITDA": [15, 25]}, "growth": 10.0, "w_dcf": 0.6, "w_multi": 0.4},
-    "모듈/부품": {"metrics": ["PER"], "ranges": {"PER": [8, 14], "PBR": [1.0, 2.0], "EV_EBITDA": [5, 10]}, "growth": 4.0, "w_dcf": 0.45, "w_multi": 0.55},
-    "기타": {"metrics": ["PER"], "ranges": {"PER": [10, 15], "PBR": [1.0, 1.5], "EV_EBITDA": [5, 8]}, "growth": 3.0, "w_dcf": 0.5, "w_multi": 0.5}
+    "설계(팹리스/IP)": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [20, 35], "PBR": [2.5, 5.0], "EV_EBITDA": [15, 25]}, 
+        "growth": 12.5, "w_dcf": 0.6, "w_multi": 0.4
+    },
+    "파운드리": {
+        "metrics": ["EV_EBITDA"], 
+        "ranges": {"PER": [10, 20], "PBR": [1.0, 2.5], "EV_EBITDA": [6, 10]}, 
+        "growth": 8.0, "w_dcf": 0.55, "w_multi": 0.45
+    },
+    "메모리/IDM": {
+        "metrics": ["PBR", "EV_EBITDA"], 
+        "ranges": {"PER": [8, 15], "PBR": [1.1, 1.8], "EV_EBITDA": [3.5, 6.0]}, 
+        "growth": 3.5, "w_dcf": 0.4, "w_multi": 0.6
+    },
+    "장비": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [15, 25], "PBR": [2.0, 4.0], "EV_EBITDA": [10, 18]}, 
+        "growth": 9.0, "w_dcf": 0.55, "w_multi": 0.45
+    },
+    "소재/케미칼": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [12, 20], "PBR": [1.5, 3.5], "EV_EBITDA": [8, 15]}, 
+        "growth": 6.0, "w_dcf": 0.5, "w_multi": 0.5
+    },
+    "후공정(OSAT)": {
+        "metrics": ["PER", "PBR"], 
+        "ranges": {"PER": [10, 18], "PBR": [1.2, 2.2], "EV_EBITDA": [6, 12]}, 
+        "growth": 4.5, "w_dcf": 0.4, "w_multi": 0.6
+    },
+    "검사/계측": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [20, 35], "PBR": [3.0, 6.0], "EV_EBITDA": [15, 25]}, 
+        "growth": 10.0, "w_dcf": 0.6, "w_multi": 0.4
+    },
+    "모듈/부품": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [8, 14], "PBR": [1.0, 2.0], "EV_EBITDA": [5, 10]}, 
+        "growth": 4.0, "w_dcf": 0.45, "w_multi": 0.55
+    },
+    "기타": {
+        "metrics": ["PER"], 
+        "ranges": {"PER": [10, 15], "PBR": [1.0, 1.5], "EV_EBITDA": [5, 8]}, 
+        "growth": 3.0, "w_dcf": 0.5, "w_multi": 0.5
+    }
 }
 
 # =========================================================
-# 2. 기업 데이터베이스 (2025년 최신 컨센서스 반영)
+# 2. 기업 데이터베이스 (2025년 최신 컨센서스 정밀 보정)
 # =========================================================
-# FnGuide 및 주요 증권사 리포트 기반 2025(E) 추정치 업데이트 완료
-# EV_EBITDA_R: 적정주가 역산을 위한 보조 지표 (Target EV/EBITDA와 유사하게 설정)
+# * 기준: FnGuide 2025(E) 컨센서스 (2025.12 기준 업데이트)
+# * 삼성전자 EPS 5,529원 등 요청하신 수치 반영 완료
 FINANCIAL_DB = {
     # [메모리/IDM]
-    "SK하이닉스": {"code": "000660", "industry": "메모리/IDM", "criteria": "2025(E)", "EPS": 53000, "BPS": 155000, "EV_EBITDA_R": 3.5, "PBR": 1.6}, 
-    "삼성전자": {"code": "005930", "industry": "메모리/IDM", "criteria": "2025(E)", "EPS": 7500, "BPS": 62000, "EV_EBITDA_R": 4.5, "PBR": 1.1},
+    "SK하이닉스": {"code": "000660", "industry": "메모리/IDM", "criteria": "2025(E)", "EPS": 53139, "BPS": 160838, "EV_EBITDA_R": 3.2, "PBR": 1.6}, 
+    "삼성전자": {"code": "005930", "industry": "메모리/IDM", "criteria": "2025(E)", "EPS": 5529, "BPS": 57951, "EV_EBITDA_R": 4.5, "PBR": 1.1},
     
     # [설계/팹리스]
     "LX세미콘": {"code": "108320", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 6025, "BPS": 70707, "EV_EBITDA_R": 5.2, "PBR": 0.8},
     "텔레칩스": {"code": "054450", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 1300, "BPS": 11500, "EV_EBITDA_R": 8.5, "PBR": 1.5},
     "가온칩스": {"code": "393360", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 1600, "BPS": 12500, "EV_EBITDA_R": 30.0, "PBR": 6.5},
-    # 추정치 부재 시 2024(E) 또는 TTM 사용
     "어보브반도체": {"code": "102120", "industry": "설계(팹리스/IP)", "criteria": "2024(E)", "EPS": 450, "BPS": 7800, "EV_EBITDA_R": 12.0, "PBR": 1.3},
     "제주반도체": {"code": "080220", "industry": "설계(팹리스/IP)", "criteria": "2024(E)", "EPS": 350, "BPS": 4500, "EV_EBITDA_R": 15.0, "PBR": 3.5},
     "칩스앤미디어": {"code": "094360", "industry": "설계(팹리스/IP)", "criteria": "2024(E)", "EPS": 400, "BPS": 3500, "EV_EBITDA_R": 25.0, "PBR": 5.2},
@@ -147,14 +183,14 @@ st.set_page_config(page_title="반도체 가치 진단", page_icon="💎", layou
 
 # 제목 및 설명
 st.title("💎 반도체 실시간 가치 진단 에이전트")
-st.caption(f"Server Date: 2025.12.02 (KST) | Data: 2024/25 Consensus + Real-time Price")
+st.caption(f"Server Date: 2025.12.02 (KST) | Data: FnGuide Consensus (2025F) + Real-time Price")
 
 # 사이드바
 with st.sidebar:
     st.header("🔍 기업 검색")
     stock_name = st.text_input("기업명 입력", placeholder="예: SK하이닉스")
     run_btn = st.button("진단 시작 🚀", type="primary", use_container_width=True)
-    st.info("💡 2025년 예상 실적(Consensus)을 기반으로 현재 주가를 평가합니다.")
+    st.info("💡 FnGuide 2025년 컨센서스(추정치)를 기반으로 현재 주가를 평가합니다.")
 
 if run_btn and stock_name:
     stock_name = stock_name.strip()
@@ -188,13 +224,13 @@ if run_btn and stock_name:
         # PER 계산
         per = current_price / eps if eps > 0 else 0
         
-        # 주당 EBITDA 역산 (Valuation 용)
+        # EBITDA 역산 (Valuation 용)
         ebitda_ps = int(current_price / ev_ebitda_ratio) if ev_ebitda_ratio > 0 else 0
 
         # 4. 가치 평가 계산
         config = CONFIG.get(industry, CONFIG["기타"])
         
-        # 멀티플 가치 (Target Price)
+        # 멀티플 가치
         val_multi, multi_desc = calculate_multiple(eps, bps, ebitda_ps, config)
         
         # DCF 가치
