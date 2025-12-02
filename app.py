@@ -24,8 +24,9 @@ CONFIG = {
 # 2. [핵심] 엑셀 데이터 내장 (Hard-coded DB)
 # =========================================================
 # 업로드해주신 엑셀 파일의 데이터를 코드에 직접 삽입하고 컬럼명을 표준화
-# (EV/EBITDA, PBR은 Target Multiples로 사용, EPS/BPS는 원천 데이터)
+# 엑셀 파일 스니펫의 최신 데이터를 반영
 FINANCIAL_DB = {
+    # EPS: 25(E) 우선, BPS: 25(E) 우선, Target Multiples: 25(E) Multiples 사용
     "LX세미콘": {"code": "108320", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 5529, "BPS": 70707, "Target_EV_EBITDA": 6.05, "Target_PBR": 0.97, "Target_PER": 18.23}, 
     "어보브반도체": {"code": "102120", "industry": "설계(팹리스/IP)", "criteria": "2024(A)", "EPS": 481, "BPS": 4260, "Target_EV_EBITDA": 47.58, "Target_PBR": 3.69, "Target_PER": 32.7},
     "DB하이텍": {"code": "000990", "industry": "파운드리", "criteria": "2025(E)", "EPS": 5458, "BPS": 54734, "Target_EV_EBITDA": 4.81, "Target_PBR": 1.16, "Target_PER": 11.65},
@@ -95,7 +96,6 @@ def calculate_multiple(eps, bps, current_price, config, company_targets):
     target_ev_val = company_targets.get('Target_EV_EBITDA') or (sum(ranges["EV_EBITDA"]) / 2)
     
     # 2. EBITDA_PS 역산 (EV/EBITDA Target을 사용)
-    # EBITDA_PS = Current Price / Target EV/EBITDA (EV=시총이라고 가정한 근사치)
     ebitda_ps = int(current_price / target_ev_val) if target_ev_val > 0 else 0
 
 
@@ -127,7 +127,7 @@ def calculate_multiple(eps, bps, current_price, config, company_targets):
 # =========================================================
 st.set_page_config(page_title="반도체 가치 진단", page_icon="💾", layout="wide") # 💾 아이콘 변경
 
-# CSS로 디자인 개선
+# CSS로 디자인 개선 (Metric 높이 고정 및 균등 분할)
 st.markdown("""
 <style>
     /* 전체 배경 및 폰트 */
@@ -140,6 +140,7 @@ st.markdown("""
         color: #3b82f6; 
         border-bottom: 2px solid #3b82f6;
         padding-bottom: 5px;
+        font-size: 28px;
     }
     /* Metric 카드 */
     [data-testid="stMetric"] {
@@ -148,18 +149,24 @@ st.markdown("""
         border-radius: 12px;
         border: 1px solid #e2e8f0;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        /* [핵심 수정] 모든 Metric 박스의 너비를 1:1:1로 균등 분할 */
         text-align: center;
-        width: 100%; /* 모바일 환경에서 100% 사용 */
+        width: 100%;
+        /* [핵심 수정] 높이 고정 및 컨텐츠 중앙 정렬 */
+        min-height: 120px; 
+        max-height: 120px; /* 높이 고정 (삐져나옴 방지) */
+        display: flex;
+        flex-direction: column;
+        justify-content: center; 
     }
     /* Metric 값 폰트 크기 조정 */
     [data-testid="stMetricValue"] {
         font-size: 24px;
-        word-break: break-all; /* 숫자가 길어질 때 줄바꿈 */
+        word-break: break-all;
     }
     /* Metric Label 폰트 크기 조정 */
     [data-testid="stMetricLabel"] {
         font-size: 12px;
+        margin-top: 0;
     }
     /* 경고/성공/에러 박스 */
     .stAlert {
@@ -167,6 +174,7 @@ st.markdown("""
         background-color: #eef2ff !important;
         border-left: 6px solid #3b82f6 !important;
         color: #1e3a8a !important;
+        text-align: center;
     }
     .stSuccess {
         background-color: #ecfdf5 !important;
@@ -176,10 +184,13 @@ st.markdown("""
         background-color: #fef2f2 !important;
         border-left: 6px solid #ef4444 !important;
     }
-    /* 모바일 반응형: 컬럼 간격 조정 */
+    /* 모바일 UX: 사이드바 숨김 처리 (CSS로 직접 처리) */
+    .stSidebar {
+        display: none;
+    }
+    /* 선택/버튼 영역 모바일 최적화 */
     .stColumns > div {
         min-width: 150px;
-        flex: 1 1 0px; /* flex-grow, flex-shrink, basis */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -189,33 +200,21 @@ st.title("💾 반도체 가치 진단 에이전트") # 💾 아이콘 변경
 st.caption(f"기준: 사용자 DB(2024/25 컨센서스) + KRX 실시간 주가")
 
 # ---------------------------------------------------------
-# [사이드바]
+# [메인] 모바일 최적화된 분석 기업 선택 영역 (사이드바 제거)
 # ---------------------------------------------------------
-with st.sidebar:
-    st.header("⚙️ 분석 기업 선택")
-    
-    # 엑셀 DB에 있는 기업만 선택 가능하게
+
+st.header("🔎 분석 기업 선택 및 실행") # 🔎 이모지 변경
+
+# 모바일 UX를 위해 컬럼을 메인에 배치 (위아래로 쌓임)
+col_select, col_button = st.columns([3, 1])
+
+with col_select:
     stock_list = list(FINANCIAL_DB.keys())
-    target_stock = st.selectbox("분석할 기업을 선택하세요", stock_list, key='selectbox')
-    
-    st.markdown("---")
-    
-    # [수정] 데이터베이스 확인 체크박스 숨김
-    # if st.checkbox("데이터베이스 확인 (전문가용)"):
-    #     st.dataframe(pd.DataFrame(FINANCIAL_DB).T)
-    
+    target_stock = st.selectbox("분석할 기업을 선택하세요", stock_list, key='selectbox_main')
 
-# ---------------------------------------------------------
-# [메인] 분석 실행
-# ---------------------------------------------------------
-st.header("🔎 분석 실행") # 🔎 이모지 변경
-col1, col2 = st.columns([3, 1])
-
-with col1:
-    st.markdown(f"**선택 기업:** {target_stock}")
-
-with col2:
-    run_btn = st.button("가치 진단 시작 🔎", type="primary", use_container_width=True, key='analyze_btn') # 🔎 이모지 변경
+with col_button:
+    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True) # 선택 박스와 높이 맞추기
+    run_btn = st.button("진단 시작 🔎", type="primary", use_container_width=True, key='analyze_btn_main')
 
 
 if run_btn and target_stock:
@@ -291,8 +290,7 @@ if run_btn and target_stock:
             else:
                 st.error("평가 불가 (적자)")
         
-        # [핵심 수정 부분] Metric 컬럼 너비 균등 분할
-        # CSS와 st.columns(3)을 함께 사용하여 반응형 정렬 보장
+        # [핵심 수정 부분] Metric 컬럼 너비 및 높이 정렬 보장
         m1, m2, m3 = st.columns(3) 
         
         m1.metric("현재 주가 (Real-time)", f"{current_price:,}원")
