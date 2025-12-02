@@ -69,26 +69,40 @@ INDUSTRY_MAP = {
     "ISC": "모듈/부품", "월덱스": "모듈/부품", "티씨케이": "모듈/부품", "삼성전기": "모듈/부품", "LG이노텍": "모듈/부품", "심텍": "모듈/부품"
 }
 
+# [비상용] KRX 서버 접속 실패 시 사용할 주요 종목 코드 매핑
+FALLBACK_CODES = {
+    "삼성전자": "005930", "SK하이닉스": "000660", "DB하이텍": "000990",
+    "LX세미콘": "108320", "한미반도체": "042700", "HPSP": "403870",
+    "리노공업": "058470", "솔브레인": "357780", "동진쎄미켐": "005290",
+    "하나마이크론": "067310", "SFA반도체": "036540", "LG이노텍": "011070",
+    "삼성전기": "009150", "원익IPS": "240810", "이오테크닉스": "039030",
+    "피에스케이": "319660", "고영": "098460", "티에스이": "131290"
+}
+
 # =========================================================
 # 2. 유틸리티 함수 (데이터 수집 보조)
 # =========================================================
 
-# 최근 영업일 찾기 및 종목 리스트 확보 (핵심 수정)
-@st.cache_data(ttl=3600) # 1시간마다 갱신
+# 최근 영업일 찾기 및 종목 리스트 확보 (Fallback 강화)
+@st.cache_data(ttl=3600)
 def get_valid_tickers_and_date():
-    # 오늘부터 7일 전까지 역순으로 조회하여 데이터가 있는 날짜 찾기
-    for i in range(7):
+    # 1차 시도: KRX 서버 접속
+    for i in range(14): # 최근 2주 조회
         try:
-            target_date = (datetime.now() - timedelta(days=i)).strftime("%Y%m%d")
-            # KOSPI 종목 리스트 조회 시도
+            # 한국 시간(KST) 기준 날짜 계산
+            kst_now = datetime.utcnow() + timedelta(hours=9)
+            target_date = (kst_now - timedelta(days=i)).strftime("%Y%m%d")
+            
             kospi = stock.get_market_ticker_list(target_date, market="KOSPI")
             kosdaq = stock.get_market_ticker_list(target_date, market="KOSDAQ")
             
-            if kospi and kosdaq: # 데이터가 존재하면
+            if kospi and kosdaq:
                 return kospi + kosdaq, target_date
         except:
             continue
-    return [], None
+    
+    # 2차 시도: 실패 시 None 반환 (이후 FALLBACK_CODES 사용)
+    return None, None
 
 def get_naver_finance_all(code):
     try:
@@ -197,37 +211,39 @@ if run_btn and stock_name:
     
     with st.spinner(f"📡 '{stock_name}' 데이터 수집 중..."):
         
-        # 1. 종목코드 찾기 (안전한 방식 적용)
+        # 1. 종목코드 찾기 (Fallback 적용)
         tickers, valid_date = get_valid_tickers_and_date()
-        
-        if not tickers:
-            st.error("KRX 서버 접속에 실패했습니다. 잠시 후 다시 시도해주세요.")
-            st.stop()
-
         code = None
-        for t in tickers:
-            # KRX에서 종목명 가져오기
-            if stock.get_market_ticker_name(t) == stock_name:
-                code = t
-                break
+        
+        if tickers:
+            # KRX 서버 정상 시
+            for t in tickers:
+                if stock.get_market_ticker_name(t) == stock_name:
+                    code = t
+                    break
+        else:
+            # KRX 서버 접속 실패 시 비상용 맵 사용
+            st.warning("⚠️ KRX 서버 접속 불안정. 비상용 데이터베이스를 사용하여 검색합니다.")
+            code = FALLBACK_CODES.get(stock_name)
         
         if not code:
-            st.error(f"❌ '{stock_name}'을(를) 찾을 수 없습니다. (정확한 종목명을 입력해주세요)")
+            st.error(f"❌ '{stock_name}'을(를) 찾을 수 없습니다. (비상용 DB에도 없는 종목입니다)")
             st.stop()
 
         try:
             # 2. 데이터 수집
-            # 유효한 날짜(valid_date)를 기준으로 조회
             
             # (A) 주가
-            price_df = stock.get_market_ohlcv_by_date(valid_date, valid_date, code)
-            if price_df.empty:
-                # 만약 valid_date에도 주가가 없다면(거래정지 등) 최근 30일치 다시 조회
-                start_date = (datetime.strptime(valid_date, "%Y%m%d") - timedelta(days=30)).strftime("%Y%m%d")
-                price_df = stock.get_market_ohlcv_by_date(start_date, valid_date, code)
+            # valid_date가 없으면 오늘 날짜 사용 (비상 모드)
+            if not valid_date:
+                valid_date = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y%m%d")
             
+            start_date = (datetime.strptime(valid_date, "%Y%m%d") - timedelta(days=30)).strftime("%Y%m%d")
+            
+            price_df = stock.get_market_ohlcv_by_date(start_date, valid_date, code)
             if price_df.empty:
-                st.error("주가 데이터를 가져올 수 없습니다.")
+                # 네이버 등에서 현재가 가져오기 시도 생략하고 알림
+                st.error("주가 데이터를 가져올 수 없습니다. (장 시작 전이거나 휴일)")
                 st.stop()
                 
             current_price = int(price_df.iloc[-1]['종가'])
@@ -235,26 +251,27 @@ if run_btn and stock_name:
             # (B) 펀더멘탈 (KRX)
             eps, bps, per, pbr = 0, 0, 0.0, 0.0
             
-            # 검색 기간을 넉넉하게 잡아서 최신 데이터 확보
-            start_date_fund = (datetime.strptime(valid_date, "%Y%m%d") - timedelta(days=30)).strftime("%Y%m%d")
-            fund_df = stock.get_market_fundamental_by_date(start_date_fund, valid_date, code)
-            
-            if not fund_df.empty:
-                # 0이 아닌 값이 있는 가장 최신 행 찾기
-                for i in range(len(fund_df)-1, -1, -1):
-                    row = fund_df.iloc[i]
-                    if row['PER'] > 0 or row['EPS'] > 0:
-                        eps = int(row.get('EPS', 0))
-                        bps = int(row.get('BPS', 0))
-                        per = float(row.get('PER', 0))
-                        pbr = float(row.get('PBR', 0))
-                        break
+            try:
+                fund_df = stock.get_market_fundamental_by_date(start_date, valid_date, code)
+                if not fund_df.empty:
+                    # 0이 아닌 값이 있는 가장 최신 행 찾기
+                    for i in range(len(fund_df)-1, -1, -1):
+                        row = fund_df.iloc[i]
+                        if row['PER'] > 0 or row['EPS'] > 0:
+                            eps = int(row.get('EPS', 0))
+                            bps = int(row.get('BPS', 0))
+                            per = float(row.get('PER', 0))
+                            pbr = float(row.get('PBR', 0))
+                            break
+            except:
+                pass # KRX 펀더멘탈 실패 시 네이버 백업으로 이동
 
-            # (C) 네이버 백업
+            # (C) 네이버 백업 (강력 권장)
             naver_data = get_naver_finance_all(code)
             ev_ebitda = 0.0
             if naver_data:
                 ev_ebitda = naver_data.get("EV_EBITDA", 0.0)
+                # KRX 데이터가 0이면 네이버 데이터로 덮어쓰기
                 if eps == 0: eps = int(naver_data.get("EPS", 0))
                 if bps == 0: bps = int(naver_data.get("BPS", 0))
                 if per == 0: per = float(naver_data.get("PER", 0.0))
