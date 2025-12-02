@@ -148,6 +148,17 @@ st.markdown("""
         border-radius: 12px;
         border: 1px solid #e2e8f0;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        /* [핵심 수정] 모든 Metric 박스의 최소 너비를 동일하게 설정하여 정렬 맞춤 */
+        min-width: 180px; 
+        text-align: center;
+    }
+    /* Metric 값 폰트 크기 조정 */
+    [data-testid="stMetricValue"] {
+        font-size: 24px;
+    }
+    /* Metric Label 폰트 크기 조정 */
+    [data-testid="stMetricLabel"] {
+        font-size: 12px;
     }
     /* 경고/성공/에러 박스 */
     .stAlert {
@@ -274,7 +285,9 @@ if run_btn and target_stock:
             else:
                 st.error("평가 불가 (적자)")
         
-        m1, m2, m3 = st.columns(3)
+        # [핵심 수정 부분] Metric 컬럼 너비 균등 분할
+        m1, m2, m3 = st.columns(3) 
+        
         m1.metric("현재 주가 (Real-time)", f"{current_price:,}원")
         if final_price > 0:
             m2.metric("적정 주가 (Target)", f"{int(final_price):,}원", delta=f"{int(final_price-current_price):,}원")
