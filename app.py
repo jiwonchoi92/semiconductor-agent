@@ -69,42 +69,15 @@ INDUSTRY_MAP = {
     "ISC": "모듈/부품", "월덱스": "모듈/부품", "티씨케이": "모듈/부품", "삼성전기": "모듈/부품", "LG이노텍": "모듈/부품", "심텍": "모듈/부품"
 }
 
-# [비상용] KRX 서버 접속 실패 시 사용할 주요 종목 코드 매핑
-FALLBACK_CODES = {
-    "삼성전자": "005930", "SK하이닉스": "000660", "DB하이텍": "000990",
-    "LX세미콘": "108320", "한미반도체": "042700", "HPSP": "403870",
-    "리노공업": "058470", "솔브레인": "357780", "동진쎄미켐": "005290",
-    "하나마이크론": "067310", "SFA반도체": "036540", "LG이노텍": "011070",
-    "삼성전기": "009150", "원익IPS": "240810", "이오테크닉스": "039030",
-    "피에스케이": "319660", "고영": "098460", "티에스이": "131290"
-}
-
 # =========================================================
-# 2. 유틸리티 함수 (데이터 수집 보조)
+# 2. 강력한 데이터 수집 함수 (네이버 금융 백업)
 # =========================================================
-
-# 최근 영업일 찾기 및 종목 리스트 확보 (Fallback 강화)
-@st.cache_data(ttl=3600)
-def get_valid_tickers_and_date():
-    # 1차 시도: KRX 서버 접속
-    for i in range(14): # 최근 2주 조회
-        try:
-            # 한국 시간(KST) 기준 날짜 계산
-            kst_now = datetime.utcnow() + timedelta(hours=9)
-            target_date = (kst_now - timedelta(days=i)).strftime("%Y%m%d")
-            
-            kospi = stock.get_market_ticker_list(target_date, market="KOSPI")
-            kosdaq = stock.get_market_ticker_list(target_date, market="KOSDAQ")
-            
-            if kospi and kosdaq:
-                return kospi + kosdaq, target_date
-        except:
-            continue
-    
-    # 2차 시도: 실패 시 None 반환 (이후 FALLBACK_CODES 사용)
-    return None, None
 
 def get_naver_finance_all(code):
+    """
+    네이버 금융에서 모든 재무 지표 크롤링 (Backup)
+    어떤 테이블에 있는지 몰라도 다 뒤져서 찾아냅니다.
+    """
     try:
         url = f"https://finance.naver.com/item/main.naver?code={code}"
         header = {'User-Agent': 'Mozilla/5.0'}
@@ -113,23 +86,29 @@ def get_naver_finance_all(code):
         
         data = {"PER": 0.0, "EPS": 0, "PBR": 0.0, "BPS": 0, "EV_EBITDA": 0.0}
         
+        # 모든 테이블을 순회하며 지표 찾기
         for df in dfs:
+            # 인덱스가 없으면 첫 컬럼을 인덱스로 설정 시도
             try:
                 if not isinstance(df.index, pd.Index) or len(df.index) == 0 or isinstance(df.index[0], int):
                     df = df.set_index(df.columns[0])
             except:
                 continue
 
+            # 값 추출 헬퍼 함수
             def find_value(keywords):
                 for idx in df.index:
                     if any(k in str(idx) for k in keywords):
+                        # 해당 행의 유효한 값 중 가장 최근(오른쪽) 값 반환
                         row = df.loc[idx]
+                        # 숫자로 변환 시도
                         vals = pd.to_numeric(row, errors='coerce')
                         valid_vals = vals.dropna()
                         if not valid_vals.empty:
                             return float(valid_vals.iloc[-1])
                 return None
 
+            # 각 지표 찾기 (이미 찾았으면 패스)
             if data["PER"] == 0: 
                 val = find_value(['PER', '배'])
                 if val: data["PER"] = val
@@ -152,6 +131,7 @@ def get_naver_finance_all(code):
 
         return data
     except Exception as e:
+        # print(f"네이버 크롤링 에러: {e}")
         return None
 
 # =========================================================
@@ -206,68 +186,53 @@ with st.sidebar:
     run_btn = st.button("진단 시작 🚀", type="primary", use_container_width=True)
 
 if run_btn and stock_name:
-    # 입력값 공백 제거
-    stock_name = stock_name.strip()
-    
     with st.spinner(f"📡 '{stock_name}' 데이터 수집 중..."):
-        
-        # 1. 종목코드 찾기 (Fallback 적용)
-        tickers, valid_date = get_valid_tickers_and_date()
+        # 1. 종목코드 찾기
+        tickers = stock.get_market_ticker_list(market="KOSPI") + stock.get_market_ticker_list(market="KOSDAQ")
         code = None
-        
-        if tickers:
-            # KRX 서버 정상 시
-            for t in tickers:
-                if stock.get_market_ticker_name(t) == stock_name:
-                    code = t
-                    break
-        else:
-            # KRX 서버 접속 실패 시 비상용 맵 사용
-            st.warning("⚠️ KRX 서버 접속 불안정. 비상용 데이터베이스를 사용하여 검색합니다.")
-            code = FALLBACK_CODES.get(stock_name)
+        for t in tickers:
+            if stock.get_market_ticker_name(t) == stock_name:
+                code = t
+                break
         
         if not code:
-            st.error(f"❌ '{stock_name}'을(를) 찾을 수 없습니다. (비상용 DB에도 없는 종목입니다)")
+            st.error("❌ 기업을 찾을 수 없습니다.")
             st.stop()
 
         try:
-            # 2. 데이터 수집
+            # 2. 데이터 수집 (KRX 시도 -> 실패시 네이버)
             
-            # (A) 주가
-            # valid_date가 없으면 오늘 날짜 사용 (비상 모드)
-            if not valid_date:
-                valid_date = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y%m%d")
+            # (A) 주가 (최근 7일 중 마지막 영업일)
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d") # 넉넉하게 30일 전부터 조회
+            price_df = stock.get_market_ohlcv_by_date(start_date, end_date, code)
             
-            start_date = (datetime.strptime(valid_date, "%Y%m%d") - timedelta(days=30)).strftime("%Y%m%d")
-            
-            price_df = stock.get_market_ohlcv_by_date(start_date, valid_date, code)
             if price_df.empty:
-                # 네이버 등에서 현재가 가져오기 시도 생략하고 알림
-                st.error("주가 데이터를 가져올 수 없습니다. (장 시작 전이거나 휴일)")
+                st.error("주가 데이터를 가져올 수 없습니다.")
                 st.stop()
-                
             current_price = int(price_df.iloc[-1]['종가'])
 
             # (B) 펀더멘탈 (KRX)
+            # 최근 30일치 데이터를 가져와서 가장 마지막 유효한 행을 찾습니다.
             eps, bps, per, pbr = 0, 0, 0.0, 0.0
             
-            try:
-                fund_df = stock.get_market_fundamental_by_date(start_date, valid_date, code)
-                if not fund_df.empty:
-                    # 0이 아닌 값이 있는 가장 최신 행 찾기
-                    for i in range(len(fund_df)-1, -1, -1):
-                        row = fund_df.iloc[i]
-                        if row['PER'] > 0 or row['EPS'] > 0:
-                            eps = int(row.get('EPS', 0))
-                            bps = int(row.get('BPS', 0))
-                            per = float(row.get('PER', 0))
-                            pbr = float(row.get('PBR', 0))
-                            break
-            except:
-                pass # KRX 펀더멘탈 실패 시 네이버 백업으로 이동
+            fund_df = stock.get_market_fundamental_by_date(start_date, end_date, code)
+            if not fund_df.empty:
+                # 0이 아닌 값이 있는 가장 최신 행 찾기 (역순 탐색)
+                for i in range(len(fund_df)-1, -1, -1):
+                    row = fund_df.iloc[i]
+                    if row['PER'] > 0 or row['EPS'] > 0:
+                        latest = row
+                        eps = int(latest.get('EPS', 0))
+                        bps = int(latest.get('BPS', 0))
+                        per = float(latest.get('PER', 0))
+                        pbr = float(latest.get('PBR', 0))
+                        break
 
-            # (C) 네이버 백업 (강력 권장)
+            # (C) 네이버 백업 (KRX 데이터가 0이거나 비었을 경우 + EV/EBITDA)
+            # 네이버 데이터를 무조건 가져와서 부족한 부분을 채웁니다.
             naver_data = get_naver_finance_all(code)
+            
             ev_ebitda = 0.0
             if naver_data:
                 ev_ebitda = naver_data.get("EV_EBITDA", 0.0)
@@ -277,8 +242,11 @@ if run_btn and stock_name:
                 if per == 0: per = float(naver_data.get("PER", 0.0))
                 if pbr == 0: pbr = float(naver_data.get("PBR", 0.0))
 
-            # (D) 보정 및 역산
-            if ev_ebitda <= 0 and per > 0: ev_ebitda = round(per * 0.7, 2)
+            # (D) 최후의 보루 (EV/EBITDA가 여전히 없으면 PER 기반 추정)
+            if ev_ebitda <= 0 and per > 0: 
+                ev_ebitda = round(per * 0.7, 2)
+            
+            # (E) EBITDA 역산
             ebitda_ps = int(current_price / ev_ebitda) if ev_ebitda > 0 else 0
             
             # 3. 가치 평가
@@ -288,9 +256,10 @@ if run_btn and stock_name:
             val_multi, multi_desc = calculate_multiple(eps, bps, ebitda_ps, config)
             val_dcf = calculate_dcf(eps, config['growth'])
             
+            # 0원 방지
             if val_multi == 0 and val_dcf > 0: final_price = val_dcf
             elif val_dcf == 0 and val_multi > 0: final_price = val_multi
-            elif val_dcf == 0 and val_multi == 0: final_price = current_price
+            elif val_dcf == 0 and val_multi == 0: final_price = current_price # 계산 불가시 현재가
             else: final_price = (val_dcf * config['w_dcf']) + (val_multi * config['w_multi'])
             
             upside = (final_price - current_price) / current_price * 100 if current_price > 0 else 0
@@ -317,6 +286,7 @@ if run_btn and stock_name:
             
             st.markdown("---")
             st.write("#### 📊 투자 지표 상세")
+            st.info(f"**[{industry}]** 산업군은 **{', '.join(config['metrics'])}** 지표가 핵심입니다.")
             
             metrics_data = {
                 "구분": ["PER (주가수익비율)", "PBR (주가순자산비율)", "EV/EBITDA"],
