@@ -127,7 +127,7 @@ def calculate_multiple(eps, bps, current_price, config, company_targets):
 # =========================================================
 st.set_page_config(page_title="반도체 가치 진단", page_icon="💾", layout="wide") # 💾 아이콘 변경
 
-# CSS로 디자인 개선 및 Metric 박스 균등 분할
+# CSS로 디자인 개선
 st.markdown("""
 <style>
     /* 전체 배경 및 폰트 */
@@ -150,10 +150,12 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         /* [핵심 수정] 모든 Metric 박스의 너비를 1:1:1로 균등 분할 */
         text-align: center;
+        width: 100%; /* 모바일 환경에서 100% 사용 */
     }
     /* Metric 값 폰트 크기 조정 */
     [data-testid="stMetricValue"] {
         font-size: 24px;
+        word-break: break-all; /* 숫자가 길어질 때 줄바꿈 */
     }
     /* Metric Label 폰트 크기 조정 */
     [data-testid="stMetricLabel"] {
@@ -173,6 +175,11 @@ st.markdown("""
     .stError {
         background-color: #fef2f2 !important;
         border-left: 6px solid #ef4444 !important;
+    }
+    /* 모바일 반응형: 컬럼 간격 조정 */
+    .stColumns > div {
+        min-width: 150px;
+        flex: 1 1 0px; /* flex-grow, flex-shrink, basis */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -285,7 +292,7 @@ if run_btn and target_stock:
                 st.error("평가 불가 (적자)")
         
         # [핵심 수정 부분] Metric 컬럼 너비 균등 분할
-        # st.columns(3)을 호출할 때 비율을 주지 않으면, CSS에서 설정한 min-width가 적용되어 균등하게 보임
+        # CSS와 st.columns(3)을 함께 사용하여 반응형 정렬 보장
         m1, m2, m3 = st.columns(3) 
         
         m1.metric("현재 주가 (Real-time)", f"{current_price:,}원")
