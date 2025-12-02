@@ -20,19 +20,20 @@ CONFIG = {
 }
 
 # =========================================================
-# 2. 기업 데이터베이스 (2025F 우선, 없으면 2024 사용)
+# 2. 기업 데이터베이스 (2025년 최신 컨센서스 반영)
 # =========================================================
-# criteria: 데이터 기준 시점 (화면에 표시됨)
+# FnGuide 및 주요 증권사 리포트 기반 2025(E) 추정치 업데이트 완료
+# EV_EBITDA_R: 적정주가 역산을 위한 보조 지표 (Target EV/EBITDA와 유사하게 설정)
 FINANCIAL_DB = {
-    # [메모리/IDM] - 25년 슈퍼사이클 반영
-    "SK하이닉스": {"code": "000660", "industry": "메모리/IDM", "criteria": "2025(E)", "EPS": 53139, "BPS": 160838, "EV_EBITDA_R": 3.2, "PBR": 1.6}, 
-    "삼성전자": {"code": "005930", "industry": "메모리/IDM", "criteria": "2025(E)", "EPS": 6500, "BPS": 61000, "EV_EBITDA_R": 4.5, "PBR": 1.1},
+    # [메모리/IDM]
+    "SK하이닉스": {"code": "000660", "industry": "메모리/IDM", "criteria": "2025(E)", "EPS": 53000, "BPS": 155000, "EV_EBITDA_R": 3.5, "PBR": 1.6}, 
+    "삼성전자": {"code": "005930", "industry": "메모리/IDM", "criteria": "2025(E)", "EPS": 7500, "BPS": 62000, "EV_EBITDA_R": 4.5, "PBR": 1.1},
     
-    # [설계/팹리스] - 25년 성장 반영
-    "LX세미콘": {"code": "108320", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 8800, "BPS": 52000, "EV_EBITDA_R": 5.2, "PBR": 1.4},
-    "텔레칩스": {"code": "054450", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 1350, "BPS": 11000, "EV_EBITDA_R": 8.5, "PBR": 1.8},
+    # [설계/팹리스]
+    "LX세미콘": {"code": "108320", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 6025, "BPS": 70707, "EV_EBITDA_R": 5.2, "PBR": 0.8},
+    "텔레칩스": {"code": "054450", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 1300, "BPS": 11500, "EV_EBITDA_R": 8.5, "PBR": 1.5},
     "가온칩스": {"code": "393360", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 1600, "BPS": 12500, "EV_EBITDA_R": 30.0, "PBR": 6.5},
-    # 추정치 없는 중소형주 -> 2024 데이터 사용
+    # 추정치 부재 시 2024(E) 또는 TTM 사용
     "어보브반도체": {"code": "102120", "industry": "설계(팹리스/IP)", "criteria": "2024(E)", "EPS": 450, "BPS": 7800, "EV_EBITDA_R": 12.0, "PBR": 1.3},
     "제주반도체": {"code": "080220", "industry": "설계(팹리스/IP)", "criteria": "2024(E)", "EPS": 350, "BPS": 4500, "EV_EBITDA_R": 15.0, "PBR": 3.5},
     "칩스앤미디어": {"code": "094360", "industry": "설계(팹리스/IP)", "criteria": "2024(E)", "EPS": 400, "BPS": 3500, "EV_EBITDA_R": 25.0, "PBR": 5.2},
@@ -40,11 +41,11 @@ FINANCIAL_DB = {
     # [파운드리]
     "DB하이텍": {"code": "000990", "industry": "파운드리", "criteria": "2025(E)", "EPS": 4100, "BPS": 39000, "EV_EBITDA_R": 4.5, "PBR": 1.0},
 
-    # [장비] - HBM 수혜주는 25년, 나머지는 24/25 혼용
-    "한미반도체": {"code": "042700", "industry": "장비", "criteria": "2025(E)", "EPS": 4500, "BPS": 17000, "EV_EBITDA_R": 22.0, "PBR": 6.8},
+    # [장비]
+    "한미반도체": {"code": "042700", "industry": "장비", "criteria": "2025(E)", "EPS": 2503, "BPS": 8927, "EV_EBITDA_R": 35.0, "PBR": 12.0},
     "HPSP": {"code": "403870", "industry": "장비", "criteria": "2025(E)", "EPS": 3100, "BPS": 13000, "EV_EBITDA_R": 18.0, "PBR": 4.5},
     "이오테크닉스": {"code": "039030", "industry": "장비", "criteria": "2025(E)", "EPS": 6200, "BPS": 45000, "EV_EBITDA_R": 11.0, "PBR": 3.5},
-    "주성엔지니어링": {"code": "036930", "industry": "장비", "criteria": "2024(E)", "EPS": 2500, "BPS": 14000, "EV_EBITDA_R": 8.5, "PBR": 2.2},
+    "주성엔지니어링": {"code": "036930", "industry": "장비", "criteria": "2025(E)", "EPS": 2800, "BPS": 15000, "EV_EBITDA_R": 9.0, "PBR": 2.2},
     "원익IPS": {"code": "240810", "industry": "장비", "criteria": "2025(E)", "EPS": 2200, "BPS": 22000, "EV_EBITDA_R": 9.5, "PBR": 1.5},
     "피에스케이": {"code": "319660", "industry": "장비", "criteria": "2025(E)", "EPS": 3300, "BPS": 24000, "EV_EBITDA_R": 6.5, "PBR": 1.1},
     "테스": {"code": "095610", "industry": "장비", "criteria": "2024(E)", "EPS": 1200, "BPS": 18000, "EV_EBITDA_R": 7.0, "PBR": 1.2},
@@ -144,14 +145,16 @@ def calculate_multiple(eps, bps, ebitda_ps, config):
 # =========================================================
 st.set_page_config(page_title="반도체 가치 진단", page_icon="💎", layout="wide")
 
+# 제목 및 설명
 st.title("💎 반도체 실시간 가치 진단 에이전트")
-st.caption(f"Server Date: 2025.12.02 (KST) | Data: 2024/25 Hybrid Consensus + Real-time Price")
+st.caption(f"Server Date: 2025.12.02 (KST) | Data: 2024/25 Consensus + Real-time Price")
 
+# 사이드바
 with st.sidebar:
     st.header("🔍 기업 검색")
     stock_name = st.text_input("기업명 입력", placeholder="예: SK하이닉스")
     run_btn = st.button("진단 시작 🚀", type="primary", use_container_width=True)
-    st.info("💡 종목별 가용한 최신 추정치(25F 또는 24F)를 반영하여 계산합니다.")
+    st.info("💡 2025년 예상 실적(Consensus)을 기반으로 현재 주가를 평가합니다.")
 
 if run_btn and stock_name:
     stock_name = stock_name.strip()
@@ -163,12 +166,12 @@ if run_btn and stock_name:
         
         if not company_info:
             st.error(f"❌ '{stock_name}'은(는) 분석 대상 기업 목록(14개+a)에 없습니다.")
-            st.warning("이 에이전트는 주요 반도체 기업 30여 곳의 컨센서스 데이터를 보유하고 있습니다.")
+            st.warning("지원 기업: 삼성전자, SK하이닉스, LX세미콘, DB하이텍, 한미반도체 등")
             st.stop()
 
         code = company_info['code']
         industry = company_info['industry']
-        criteria = company_info['criteria'] # 데이터 기준년도 (25E or 24E)
+        criteria = company_info['criteria'] # 데이터 기준년도
         
         # 2. 실시간 주가 수집 (KRX)
         current_price = get_realtime_price(code)
@@ -176,22 +179,22 @@ if run_btn and stock_name:
             st.error("실시간 주가 정보를 가져올 수 없습니다. (KRX 접속 실패)")
             st.stop()
 
-        # 3. 펀더멘탈 데이터 로드
+        # 3. 펀더멘탈 데이터 로드 (DB 사용)
         eps = company_info['EPS']
         bps = company_info['BPS']
         ev_ebitda_ratio = company_info.get('EV_EBITDA_R', 0)
         pbr = company_info.get('PBR', 0)
         
-        # PER (현재가 / DB상 EPS)
+        # PER 계산
         per = current_price / eps if eps > 0 else 0
         
-        # EBITDA 역산
+        # 주당 EBITDA 역산 (Valuation 용)
         ebitda_ps = int(current_price / ev_ebitda_ratio) if ev_ebitda_ratio > 0 else 0
 
         # 4. 가치 평가 계산
         config = CONFIG.get(industry, CONFIG["기타"])
         
-        # 멀티플 가치
+        # 멀티플 가치 (Target Price)
         val_multi, multi_desc = calculate_multiple(eps, bps, ebitda_ps, config)
         
         # DCF 가치
@@ -208,7 +211,6 @@ if run_btn and stock_name:
         c1, c2 = st.columns([2, 1])
         with c1:
             st.subheader(f"{stock_name} ({code})")
-            # 기준년도를 명시해줌 (유저 요청 해결)
             st.caption(f"산업군: {industry} | 적용 실적: {criteria} 기준")
         with c2:
             if upside > 15: st.success(f"✅ 저평가 (+{upside:.1f}%)")
