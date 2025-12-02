@@ -4,6 +4,7 @@ from pykrx import stock
 from datetime import datetime, timedelta
 import time
 import os
+import io
 
 # =========================================================
 # 1. 설정 (산업군, 핵심 지표, 가중치)
@@ -24,9 +25,15 @@ CONFIG = {
 # 2. 엑셀 데이터 로드 및 DB 구축
 # =========================================================
 @st.cache_data
-def load_financial_data(filepath):
+def load_financial_data(uploaded_file):
+    """업로드된 엑셀 파일을 읽고 재무 데이터를 DB로 변환합니다."""
     try:
-        df = pd.read_excel(filepath)
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            # 기본 XLSX 파일 로드 (가장 흔한 형식)
+            df = pd.read_excel(uploaded_file)
+            
         # 컬럼명 공백 제거 및 표준화
         df.columns = df.columns.str.strip().str.replace(' ', '')
         
@@ -35,55 +42,41 @@ def load_financial_data(filepath):
             name = row.get('종목명')
             if pd.isna(name): continue
             
-            code = str(row.get('종목코드', '')).zfill(6) # 6자리 문자열로 변환
-            if code == '000nan': # 코드가 없는 경우 매핑 테이블 참고 (임시)
-                 # 실제로는 엑셀에 코드가 있어야 하지만, 없으면 이름으로 매핑 시도
-                 pass 
+            # --- 펀더멘탈 데이터 추출 (25년 추정치 우선) ---
+            # 엑셀 파일 스니펫 기반 컬럼명 사용
+            eps_25 = row.get('25(E)EPS', row.get('25EPS', 0))
+            eps_24 = row.get('24(A)EPS', row.get('24EPS', 0))
+            bps_25 = row.get('25(E)BPS', row.get('25BPS', 0))
+            bps_24 = row.get('24(A)BPS', row.get('24BPS', 0))
 
-            # 산업군 매핑
-            industry = row.get('세부산업군', '기타')
-
-            # 25년 추정치 우선, 없으면 24년 데이터 사용
-            # 엑셀 컬럼명에 따라 수정 필요 (예: '25(E)EPS', '24(A)EPS' 등)
-            # 여기서는 일반적인 패턴을 가정하고 작성합니다. 실제 엑셀 헤더를 확인해야 정확합니다.
-            
-            # EPS
-            eps_25 = row.get('25(E)EPS', 0)
-            eps_24 = row.get('24(A)EPS', 0) # 또는 24(E)EPS
-            
+            # EPS 및 기준년도 설정
             if pd.notna(eps_25) and eps_25 != 0:
-                eps = eps_25
-                criteria = "2025(E)"
-            else:
-                eps = eps_24
-                criteria = "2024(A)"
-            
-            # BPS
-            bps_25 = row.get('25(E)BPS', 0)
-            bps_24 = row.get('24(A)BPS', 0)
-            
-            if pd.notna(bps_25) and bps_25 != 0:
+                eps, criteria = eps_25, "2025(E)"
                 bps = bps_25
             else:
+                eps, criteria = eps_24, "2024(A)"
                 bps = bps_24
-                
-            # Target Multiples (엑셀에 있으면 가져오고 없으면 CONFIG 기본값 사용)
-            # 엑셀에 'TargetPER', 'TargetPBR', 'TargetEV/EBITDA' 컬럼이 있다고 가정
-            target_per = row.get('TargetPER', 0)
-            target_pbr = row.get('TargetPBR', 0)
-            target_ev_ebitda = row.get('TargetEV/EBITDA', 0)
-            
-            # EBITDA_PS (엑셀에 없으면 0으로 두고 나중에 역산)
-            ebitda_ps = row.get('EBITDA_PS', 0)
-            if pd.isna(ebitda_ps): ebitda_ps = 0
 
+            # --- Target Multiples 및 EBITDA_PS 데이터 추출 ---
+            # 엑셀 파일 스니펫 기반 컬럼명 사용 (25년 EV/EBITTA와 PBR을 Target 값으로 사용)
+            target_ev_ebitda = row.get('25(E)EV/EBITTA', row.get('25EV/EBITTA', 0))
+            target_pbr = row.get('25(E)PBR', row.get('25PBR', 0))
+            
+            # EBITDA_PS는 엑셀에 해당 컬럼이 없으므로 일단 0으로 둡니다 (후에 역산 예정)
+            ebitda_ps = 0 
+            
+            # Target_PER은 엑셀에 없으므로, 해당 종목의 25(E) PER 값을 TargetPER로 사용 (약식)
+            target_per = row.get('25(E)PER', row.get('25PER', 0))
+
+
+            # --- 최종 DB 저장 ---
             db[name] = {
-                "code": code,
-                "industry": industry,
+                "code": str(row.get('단축코드(6자리)', '')).zfill(6),
+                "industry": row.get('세부산업군', '기타'),
                 "criteria": criteria,
                 "EPS": int(eps) if pd.notna(eps) else 0,
-                "BPS": int(bps) if pd.notna(bps) else 0,
-                "EBITDA_PS": int(ebitda_ps),
+                "BPS": int(bps) if pd.notna(bps) else 0, # PBR 계산 필수
+                "EBITDA_PS": int(ebitda_ps), # 0으로 저장 후 나중에 역산
                 "Target_PER": float(target_per) if pd.notna(target_per) else 0,
                 "Target_PBR": float(target_pbr) if pd.notna(target_pbr) else 0,
                 "Target_EV_EBITDA": float(target_ev_ebitda) if pd.notna(target_ev_ebitda) else 0
@@ -91,27 +84,17 @@ def load_financial_data(filepath):
             
         return db
     except Exception as e:
-        st.error(f"엑셀 파일 로드 실패: {e}")
+        st.error(f"⚠️ 파일 처리 오류. 컬럼명을 확인해주세요: {e}")
         return {}
-
-# 엑셀 파일명 (같은 폴더에 위치해야 함)
-EXCEL_FILE = '반도체 주가 가치 진단 에이전트 샘플기업.xlsx'
-
-# DB 로드 (앱 실행 시 한 번만 수행)
-if os.path.exists(EXCEL_FILE):
-    FINANCIAL_DB = load_financial_data(EXCEL_FILE)
-else:
-    st.warning(f"'{EXCEL_FILE}' 파일을 찾을 수 없습니다. 기본 데이터로 실행합니다.")
-    # (기존 하드코딩된 FINANCIAL_DB를 여기에 백업으로 넣어두셔도 됩니다)
-    FINANCIAL_DB = {} 
-
+    
 # =========================================================
-# 3. 로직 함수 (실시간 주가 수집)
+# 3. 로직 함수
 # =========================================================
 
 def get_kst_now():
     return datetime.utcnow() + timedelta(hours=9)
 
+@st.cache_data(ttl=300) # 5분 TTL 설정
 def get_realtime_price(code):
     """KRX에서 실시간(또는 최근 종가) 가격만 가져옵니다."""
     try:
@@ -140,7 +123,7 @@ def calculate_multiple(eps, bps, ebitda_ps, config, company_targets):
     values = []
     used_metrics_str = []
     
-    # 엑셀에 Target 멀티플이 있으면 그걸 우선 사용, 없으면 산업군 평균 사용
+    # Target 멀티플은 엑셀, 없으면 CONFIG 산업군 평균 사용
     
     # 1. PER
     if "PER" in metrics:
@@ -170,7 +153,7 @@ def calculate_multiple(eps, bps, ebitda_ps, config, company_targets):
             values.append(ebitda_ps * target)
             used_metrics_str.append(f"EV/EBITDA(×{target:.1f})")
         
-    if not values: return 0, "데이터 부족"
+    if not values: return 0, "평가 불가"
     return int(sum(values) / len(values)), ", ".join(used_metrics_str)
 
 # =========================================================
@@ -178,63 +161,74 @@ def calculate_multiple(eps, bps, ebitda_ps, config, company_targets):
 # =========================================================
 st.set_page_config(page_title="반도체 가치 진단", page_icon="💎", layout="wide")
 
-st.title("💎 반도체 실시간 가치 진단 에이전트")
-st.caption(f"Server Date: 2025.12.02 (KST) | Data: Excel Database + Real-time Price")
+st.title("💎 반도체 가치 진단 에이전트")
+st.caption(f"기준: 사용자 업로드 데이터(Excel) + 실시간 주가")
 
+# ---------------------------------------------------------
+# [사이드바] 파일 업로드 및 데이터 처리
+# ---------------------------------------------------------
 with st.sidebar:
-    st.header("🔍 기업 검색")
-    # 엑셀 DB에 있는 기업만 선택 가능하게
-    stock_list = list(FINANCIAL_DB.keys())
-    stock_name = st.selectbox("기업 선택", stock_list) if stock_list else st.text_input("기업명 입력")
+    st.header("1. 엑셀 데이터 업로드")
+    st.warning("⚠️ 엑셀에 '종목코드', '25(E)EPS', '25(E)BPS', '25(E)EV/EBITTA' 컬럼이 있어야 합니다.")
     
-    run_btn = st.button("진단 시작 🚀", type="primary", use_container_width=True)
+    uploaded_file = st.file_uploader("엑셀 파일 업로드", type=['xlsx', 'xls', 'csv'], key='uploader')
     
-    st.markdown("---")
-    st.info(f"📂 로드된 엑셀 데이터: {len(FINANCIAL_DB)}개 기업")
-
-if run_btn and stock_name:
-    with st.spinner(f"📡 '{stock_name}' 분석 중..."):
+    current_db = {}
+    if uploaded_file is not None:
+        current_db = load_financial_data(uploaded_file)
         
-        company_info = FINANCIAL_DB.get(stock_name)
-        
-        if not company_info:
-            st.error("DB에서 기업 정보를 찾을 수 없습니다.")
-            st.stop()
+    if current_db:
+        st.success(f"✅ {len(current_db)}개 기업 데이터 로드 완료!")
 
+# ---------------------------------------------------------
+# [메인] 분석 실행
+# ---------------------------------------------------------
+
+st.header("2. 분석 기업 선택 및 실행")
+
+if not current_db:
+    st.warning("데이터베이스가 로드되지 않았습니다. 사이드바에서 엑셀 파일을 업로드해주세요.")
+    st.stop()
+    
+stock_list = list(current_db.keys())
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    target_stock = st.selectbox("분석할 기업을 선택하세요", stock_list)
+
+with col2:
+    st.write("") 
+    st.write("") 
+    run_btn = st.button("진단 시작 🚀", type="primary", use_container_width=True, key='analyze_btn')
+
+
+if run_btn and target_stock:
+    with st.spinner(f"📡 '{target_stock}' 실시간 주가 조회 중..."):
+        
+        company_info = current_db.get(target_stock)
+        
         code = company_info['code']
         industry = company_info['industry']
         criteria = company_info['criteria']
         
         # 1. 실시간 주가 수집 (KRX)
-        # 엑셀에 코드가 없으면 종목명으로 찾기 시도 (보완 로직)
-        if not code or code == '000nan':
-             try:
-                today_str = get_kst_now().strftime("%Y%m%d")
-                tickers = stock.get_market_ticker_list(today_str, market="KOSPI") + stock.get_market_ticker_list(today_str, market="KOSDAQ")
-                for t in tickers:
-                    if stock.get_market_ticker_name(t) == stock_name:
-                        code = t
-                        break
-             except: pass
-        
         current_price = get_realtime_price(code)
         if current_price == 0:
-            st.error("실시간 주가 정보를 가져올 수 없습니다. (KRX 접속 실패)")
+            st.error(f"실시간 주가를 가져올 수 없습니다. (종목코드: {code})")
             st.stop()
 
         # 2. 펀더멘탈 데이터 (엑셀)
         eps = company_info['EPS']
         bps = company_info['BPS']
-        ebitda_ps = company_info['EBITDA_PS']
-        
-        # EBITDA_PS가 엑셀에 없으면(0이면) 역산 시도
-        # 역산하려면 Target EV/EBITDA가 필요함
+        ebitda_ps = company_info['EBITDA_PS'] # 초기값은 0
         target_ev = company_info['Target_EV_EBITDA']
-        if ebitda_ps == 0 and target_ev > 0:
-             # 현재가 기준 역산 (단순화)
-             ebitda_ps = int(current_price / target_ev)
         
-        # 현재 지표 계산
+        # --- 핵심 로직: EBITDA_PS가 엑셀에 없으면 역산 ---
+        if ebitda_ps == 0 and target_ev > 0:
+             # EV/EBITDA = Price / EBITDA_PS 이므로, EBITDA_PS = Price / EV/EBITDA_Target
+             ebitda_ps = int(current_price / target_ev) if target_ev != 0 else 0
+        
+        # 현재 지표 계산 (출력용)
         per_val = current_price / eps if eps > 0 else 0
         pbr_val = current_price / bps if bps > 0 else 0
         ev_ebitda_val = current_price / ebitda_ps if ebitda_ps > 0 else 0
@@ -255,7 +249,6 @@ if run_btn and stock_name:
         verdict_color = "gray"
 
         if val_multi == 0 and val_dcf <= 0:
-            final_price = 0
             verdict_msg = "⚠️ 적자 지속으로 평가 불가"
         else:
             if val_multi == 0: final_price = val_dcf
@@ -275,9 +268,10 @@ if run_btn and stock_name:
                 verdict_color = "orange"
 
         # 4. 결과 출력
+        st.divider()
         c1, c2 = st.columns([2, 1])
         with c1:
-            st.subheader(f"{stock_name} ({code})")
+            st.subheader(f"{target_stock} ({code})")
             st.caption(f"산업군: {industry} | 적용 실적: {criteria} (Excel)")
         with c2:
             if final_price > 0:
@@ -287,7 +281,6 @@ if run_btn and stock_name:
             else:
                 st.error("평가 불가 (적자)")
         
-        st.divider()
         m1, m2, m3 = st.columns(3)
         m1.metric("현재 주가 (Real-time)", f"{current_price:,}원")
         if final_price > 0:
@@ -303,6 +296,11 @@ if run_btn and stock_name:
         metrics_data = {
             "구분": ["PER", "PBR", "EV/EBITDA"],
             "현재 수치": [per_str, pbr_str, ev_ebitda_str],
+            "적용 대상 목표 멀티플": [
+                f"{company_info.get('Target_PER', sum(config['ranges']['PER'])/2):.1f}배 (or 산업평균)" if "PER" in config['metrics'] else "-",
+                f"{company_info.get('Target_PBR', sum(config['ranges']['PBR'])/2):.1f}배 (or 산업평균)" if "PBR" in config['metrics'] else "-",
+                f"{company_info.get('Target_EV_EBITDA', sum(config['ranges']['EV_EBITDA'])/2):.1f}배 (or 산업평균)" if "EV/EBITDA" in config['metrics'] else "-",
+            ],
             "적용 여부": [
                 "✅ 핵심 지표" if "PER" in config['metrics'] else "ℹ️ 보조 지표",
                 "✅ 핵심 지표" if "PBR" in config['metrics'] else "ℹ️ 보조 지표",
@@ -314,6 +312,6 @@ if run_btn and stock_name:
         with st.expander("🔍 엑셀 데이터 원본 보기"):
             st.write(f"- EPS: {eps:,}원")
             st.write(f"- BPS: {bps:,}원")
-            st.write(f"- EBITDA 추정: {ebitda_ps:,}원")
+            st.write(f"- EBITDA 추정: {ebitda_ps:,}원 (EV/EBITDA Target을 이용해 역산됨)")
             st.write(f"- 성장률 가정: {config['growth']}%")
             st.write(f"- 멀티플 산출식: {multi_desc}")
