@@ -69,6 +69,7 @@ INDUSTRY_MAP = {
     "ISC": "모듈/부품", "월덱스": "모듈/부품", "티씨케이": "모듈/부품", "삼성전기": "모듈/부품", "LG이노텍": "모듈/부품", "심텍": "모듈/부품"
 }
 
+# [비상용 코드 지도]
 FALLBACK_CODES = {
     "삼성전자": "005930", "SK하이닉스": "000660", "DB하이텍": "000990", "LX세미콘": "108320",
     "한미반도체": "042700", "HPSP": "403870", "리노공업": "058470", "솔브레인": "357780", 
@@ -78,7 +79,7 @@ FALLBACK_CODES = {
 }
 
 # =========================================================
-# 2. 데이터 수집 함수 (네이버 금융 정밀 크롤링)
+# 2. 데이터 수집 함수 (한국어 헤더 적용)
 # =========================================================
 
 def get_kst_now():
@@ -87,62 +88,61 @@ def get_kst_now():
 def get_naver_finance_all(code):
     """
     네이버 금융에서 재무 데이터를 크롤링합니다.
-    '최근 연간 실적' 중 가장 미래(추정치) 또는 최신 값을 가져옵니다.
+    'Accept-Language' 헤더를 통해 한국어 페이지(추정치 포함)를 강제로 요청합니다.
     """
     try:
         url = f"https://finance.naver.com/item/main.naver?code={code}"
-        # 브라우저인 척 헤더 설정 (차단 방지)
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        response = requests.get(url, headers=headers)
         
-        # 인코딩 설정
+        # [중요] 한국인 브라우저인 척 위장하는 헤더
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7', # 한국어 우선 요청
+            'Referer': 'https://finance.naver.com/'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        # 인코딩 강제 설정 (한글 깨짐 방지)
         response.encoding = 'euc-kr'
         
         dfs = pd.read_html(response.text)
         
         data = {"PER": 0.0, "EPS": 0, "PBR": 0.0, "BPS": 0, "EV_EBITDA": 0.0}
         
-        # '주요재무제표' 또는 '최근 연간 실적' 테이블 찾기
-        target_df = None
+        # '주요재무제표' 또는 '최근 연간 실적' 테이블을 찾아서 처리
         for df in dfs:
-            if '최근 연간 실적' in str(df.columns) or '주요재무제표' in str(df.columns):
-                target_df = df
-                break
-        
-        # 못 찾았으면 전체 탐색
-        if target_df is None:
-            for df in dfs:
-                if 'EPS' in str(df.index) or 'EPS' in str(df.iloc[:,0].values):
-                    target_df = df
-                    break
+            # 인덱스 설정
+            try:
+                if len(df) > 0 and len(df.columns) > 1:
+                    df = df.set_index(df.columns[0])
+            except: continue
 
-        if target_df is not None:
-            # 인덱스 정리
-            if not isinstance(target_df.index, pd.Index) or len(target_df.index) == 0 or isinstance(target_df.index[0], int):
-                target_df = target_df.set_index(target_df.columns[0])
-
-            def extract_value(keywords):
-                for idx in target_df.index:
-                    if any(k in str(idx) for k in keywords):
-                        # 행 데이터 가져오기
-                        row = target_df.loc[idx]
-                        # 숫자로 변환 (문자열, NaN 제거)
+            # 값 추출 함수 (오른쪽 끝값 = 최신/추정치 가져오기)
+            def find_val(key_list):
+                for idx in df.index:
+                    if any(k in str(idx) for k in key_list):
+                        # 해당 행의 데이터 가져오기
+                        row = df.loc[idx]
+                        # 숫자로 변환 (에러나면 NaN)
                         vals = pd.to_numeric(row, errors='coerce')
+                        # 유효한 값들만 남기기
                         valid_vals = vals.dropna()
                         
-                        # 값이 있으면 가장 오른쪽(최신/추정치) 값 반환
                         if not valid_vals.empty:
+                            # [핵심] 가장 오른쪽 값(iloc[-1])이 2024년 추정치(E)일 확률이 높음
                             return float(valid_vals.iloc[-1])
-                return 0.0
+                return 0
 
-            data["PER"] = extract_value(['PER', '배'])
-            data["EPS"] = int(extract_value(['EPS', '원']))
-            data["PBR"] = extract_value(['PBR', '배'])
-            data["BPS"] = int(extract_value(['BPS', '원']))
-            data["EV_EBITDA"] = extract_value(['EV/EBITDA'])
-
+            # 하나라도 찾으면 업데이트 (이미 찾았어도 0이면 다시 찾기)
+            if data['PER'] == 0: data['PER'] = find_val(['PER', '배'])
+            if data['EPS'] == 0: data['EPS'] = int(find_val(['EPS', '원']))
+            if data['PBR'] == 0: data['PBR'] = find_val(['PBR', '배'])
+            if data['BPS'] == 0: data['BPS'] = int(find_val(['BPS', '원']))
+            if data['EV_EBITDA'] == 0: data['EV_EBITDA'] = find_val(['EV/EBITDA'])
+            
         return data
     except Exception as e:
+        # print(f"네이버 크롤링 실패: {e}")
         return None
 
 # =========================================================
@@ -180,7 +180,7 @@ def calculate_multiple(eps, bps, ebitda_ps, config):
         values.append(ebitda_ps * target)
         used_metrics_str.append(f"EV/EBITDA(×{target})")
         
-    if not values: return 0, "데이터 부족"
+    if not values: return 0, "데이터 부족 (EPS/BPS/EBITDA 누락)"
     return int(sum(values) / len(values)), ", ".join(used_metrics_str)
 
 # =========================================================
@@ -211,56 +211,64 @@ if run_btn and stock_name:
             except: pass
         
         if not code:
-            st.error(f"❌ '{stock_name}'을(를) 찾을 수 없습니다.")
+            st.error("❌ 기업 코드를 찾을 수 없습니다. (Fallback 목록에도 없음)")
             st.stop()
 
         try:
-            # 2. 데이터 수집 (네이버 금융 우선 -> KRX 보조)
-            # 서버 환경에서는 네이버 크롤링이 훨씬 정확한 최신(추정) 데이터를 줍니다.
-            
+            # 2. 데이터 수집 (KRX -> Naver 순차 시도)
             current_price = 0
             eps, bps, per, pbr, ev_ebitda = 0, 0, 0.0, 0.0, 0.0
             data_source = ""
 
-            # (A) 주가 수집 (KRX)
+            # (A) KRX 주가 및 기본 정보 시도 (최근 30일 조회)
             try:
                 end_date = get_kst_now().strftime("%Y%m%d")
                 start_date = (get_kst_now() - timedelta(days=30)).strftime("%Y%m%d")
+                
+                # 주가
                 price_df = stock.get_market_ohlcv_by_date(start_date, end_date, code)
                 if not price_df.empty: 
                     current_price = int(price_df.iloc[-1]['종가'])
+                
+                # 펀더멘탈
+                fund_df = stock.get_market_fundamental_by_date(start_date, end_date, code)
+                if not fund_df.empty:
+                    # 최신순으로 뒤져서 0이 아닌 값 찾기
+                    for i in range(len(fund_df)-1, -1, -1):
+                        row = fund_df.iloc[i]
+                        if row['PER'] > 0 or row['EPS'] > 0:
+                            eps = int(row.get('EPS', 0))
+                            bps = int(row.get('BPS', 0))
+                            per = float(row.get('PER', 0))
+                            pbr = float(row.get('PBR', 0))
+                            data_source = "KRX"
+                            break
             except: pass
 
-            # (B) 재무 데이터 수집 (네이버 금융 정밀 크롤링)
-            # 로컬과 동일한 4,950원 데이터를 가져오기 위해 네이버를 메인으로 씁니다.
-            naver_data = get_naver_finance_all(code)
-            if naver_data:
-                eps = int(naver_data.get('EPS', 0))
-                bps = int(naver_data.get('BPS', 0))
-                per = float(naver_data.get('PER', 0))
-                pbr = float(naver_data.get('PBR', 0))
-                ev_ebitda = float(naver_data.get('EV/EBITDA', 0))
-                data_source = "Naver Finance (Consensus)"
+            # (B) 네이버 금융 (데이터가 비었거나, KRX값이 2,098처럼 너무 작을 때 덮어쓰기용)
+            # 삼성전자 예시: KRX가 2023년 결산(2,098)을 주면, 네이버 추정치(4,950)로 교체
+            n_data = get_naver_finance_all(code)
+            
+            if n_data:
+                # EV/EBITDA는 네이버에서만 옴
+                ev_ebitda = n_data.get('EV_EBITDA', 0.0)
+                
+                # 네이버 EPS가 존재하고, 기존 EPS보다 크거나(미래 추정치) 기존이 0이면 덮어쓰기
+                # (단, 적자 전환 등의 이슈가 있을 수 있으나 일반적으로 Valuation은 미래치를 선호함)
+                n_eps = int(n_data.get('EPS', 0))
+                if n_eps > 0 and (eps == 0 or n_eps > eps * 1.5): # 차이가 크면 추정치로 간주
+                    eps = n_eps
+                    bps = int(n_data.get('BPS', 0))
+                    per = float(n_data.get('PER', 0.0))
+                    pbr = float(n_data.get('PBR', 0.0))
+                    data_source = "Naver Finance (Consensus)"
 
-            # (C) 네이버 실패 시 KRX 보조
-            if eps == 0:
-                try:
-                    fund_df = stock.get_market_fundamental_by_date(start_date, end_date, code)
-                    if not fund_df.empty:
-                        latest = fund_df.iloc[-1]
-                        eps = int(latest['EPS'])
-                        bps = int(latest['BPS'])
-                        per = float(latest['PER'])
-                        pbr = float(latest['PBR'])
-                        data_source = "KRX (Historical)"
-                except: pass
-
-            # (D) 최종 보정
+            # (C) 최종 보정
             if ev_ebitda <= 0 and per > 0: ev_ebitda = round(per * 0.7, 2)
             ebitda_ps = int(current_price / ev_ebitda) if ev_ebitda > 0 and current_price > 0 else 0
             
             if eps == 0:
-                st.error("재무 데이터를 가져오지 못했습니다.")
+                st.error("재무 데이터를 가져오지 못했습니다. (서버 차단 가능성)")
                 st.stop()
 
             # 3. 계산
