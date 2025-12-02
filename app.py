@@ -26,7 +26,6 @@ CONFIG = {
 # 업로드해주신 엑셀 파일의 데이터를 코드에 직접 삽입하고 컬럼명을 표준화
 # 엑셀 파일 스니펫의 최신 데이터를 반영
 FINANCIAL_DB = {
-    # EPS: 25(E) 우선, BPS: 25(E) 우선, Target Multiples: 25(E) Multiples 사용
     "LX세미콘": {"code": "108320", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 5529, "BPS": 70707, "Target_EV_EBITDA": 6.05, "Target_PBR": 0.97, "Target_PER": 18.23}, 
     "어보브반도체": {"code": "102120", "industry": "설계(팹리스/IP)", "criteria": "2024(A)", "EPS": 481, "BPS": 4260, "Target_EV_EBITDA": 47.58, "Target_PBR": 3.69, "Target_PER": 32.7},
     "DB하이텍": {"code": "000990", "industry": "파운드리", "criteria": "2025(E)", "EPS": 5458, "BPS": 54734, "Target_EV_EBITDA": 4.81, "Target_PBR": 1.16, "Target_PER": 11.65},
@@ -96,6 +95,7 @@ def calculate_multiple(eps, bps, current_price, config, company_targets):
     target_ev_val = company_targets.get('Target_EV_EBITDA') or (sum(ranges["EV_EBITDA"]) / 2)
     
     # 2. EBITDA_PS 역산 (EV/EBITDA Target을 사용)
+    # EBITDA_PS = Current Price / Target EV/EBITDA (EV=시총이라고 가정한 근사치)
     ebitda_ps = int(current_price / target_ev_val) if target_ev_val > 0 else 0
 
 
@@ -192,6 +192,15 @@ st.markdown("""
     .stColumns > div {
         min-width: 150px;
     }
+    /* [새로운 수정] 판정 결과 텍스트 중앙 정렬 */
+    .stSuccess, .stError, .stWarning {
+        text-align: center;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -278,19 +287,28 @@ if run_btn and target_stock:
 
         # 4. 결과 출력
         st.divider()
+        
+        # [수정] 판정 결과를 Metric 박스 위 중앙에 배치하기 위해,
+        # 제목 영역과 판정 영역을 분리하여 중앙에 정렬합니다.
+        
+        # 4-1. 제목/산업군 정보
         c1, c2 = st.columns([2, 1])
         with c1:
             st.subheader(f"{target_stock} ({code})")
             st.caption(f"산업군: {industry} | 적용 실적: {criteria} 기준")
-        with c2:
-            if final_price > 0:
-                if verdict_color == "green": st.success(verdict_msg)
-                elif verdict_color == "red": st.error(verdict_msg)
-                else: st.warning(verdict_msg)
-            else:
-                st.error("평가 불가 (적자)")
+
+        # 4-2. 판정 결과 박스 (가운데 정렬)
+        st.markdown("<div style='text-align: center; margin-bottom: 20px;'>", unsafe_allow_html=True)
+        if final_price > 0:
+            if verdict_color == "green": st.success(verdict_msg)
+            elif verdict_color == "red": st.error(verdict_msg)
+            else: st.warning(verdict_msg)
+        else:
+            st.error("평가 불가 (적자)")
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        # [핵심 수정 부분] Metric 컬럼 너비 및 높이 정렬 보장
+        
+        # 4-3. Metric 박스 출력 (균등 너비/높이)
         m1, m2, m3 = st.columns(3) 
         
         m1.metric("현재 주가 (Real-time)", f"{current_price:,}원")
