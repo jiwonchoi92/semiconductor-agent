@@ -23,9 +23,10 @@ CONFIG = {
 # =========================================================
 # 2. [핵심] 엑셀 데이터 내장 (Hard-coded DB)
 # =========================================================
-# 업로드해주신 엑셀 파일의 데이터를 코드에 직접 삽입
+# 업로드해주신 엑셀 파일의 데이터를 코드에 직접 삽입하고 컬럼명을 표준화
+# (EV/EBITDA, PBR은 Target Multiples로 사용, EPS/BPS는 원천 데이터)
 FINANCIAL_DB = {
-    "LX세미콘": {"code": "108320", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 5529, "BPS": 70707, "Target_EV_EBITDA": 6.05, "Target_PBR": 0.84, "Target_PER": 18.23}, 
+    "LX세미콘": {"code": "108320", "industry": "설계(팹리스/IP)", "criteria": "2025(E)", "EPS": 5529, "BPS": 70707, "Target_EV_EBITDA": 6.05, "Target_PBR": 0.97, "Target_PER": 18.23}, 
     "어보브반도체": {"code": "102120", "industry": "설계(팹리스/IP)", "criteria": "2024(A)", "EPS": 481, "BPS": 4260, "Target_EV_EBITDA": 47.58, "Target_PBR": 3.69, "Target_PER": 32.7},
     "DB하이텍": {"code": "000990", "industry": "파운드리", "criteria": "2025(E)", "EPS": 5458, "BPS": 54734, "Target_EV_EBITDA": 4.81, "Target_PBR": 1.16, "Target_PER": 11.65},
     "삼성전자": {"code": "005930", "industry": "메모리/IDM", "criteria": "2025(E)", "EPS": 5529, "BPS": 57951, "Target_EV_EBITDA": 4.75, "Target_PBR": 1.1, "Target_PER": 13.5},
@@ -82,14 +83,11 @@ def calculate_dcf(eps, growth_rate):
 def calculate_multiple(eps, bps, current_price, config, company_targets):
     """
     멀티플 계산 (EPS, BPS, EV/EBITDA Target을 사용)
-    EBITDA_PS는 엑셀에 없으므로, Target EV/EBITDA와 현재 주가로 역산하여 사용
     """
     metrics = config['metrics']
     ranges = config['ranges']
     values = []
     used_metrics_str = []
-    
-    # 엑셀 Target 값 또는 산업군 평균 사용
     
     # 1. Target Multiples 정의 (엑셀 값 우선)
     target_per_val = company_targets.get('Target_PER') or (sum(ranges["PER"]) / 2)
@@ -185,9 +183,9 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # DB 원본 확인용 (숨겨진 기능)
-    if st.checkbox("데이터베이스 확인 (전문가용)"):
-        st.dataframe(pd.DataFrame(FINANCIAL_DB).T)
+    # [수정] 데이터베이스 확인 체크박스 숨김
+    # if st.checkbox("데이터베이스 확인 (전문가용)"):
+    #     st.dataframe(pd.DataFrame(FINANCIAL_DB).T)
     
 
 # ---------------------------------------------------------
